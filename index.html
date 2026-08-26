@@ -385,50 +385,7 @@
 </div>
 
 <div class="modal-overlay hidden" id="profileModal">
-  <div class="modal-card">
-    <h2 id="profileModalTitle" style="margin:0 0 4px;font-size:22px;color:var(--twilight-deep);">Who's learning?</h2>
-    <p id="profileModalSub" style="margin:0 0 16px;font-size:13.5px;color:var(--ink-soft);font-weight:600;">Pick a learner, or add a new one. Everyone keeps their own progress.</p>
-    <div id="profileList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;"></div>
-    <div style="text-align:center;margin-bottom:14px;">
-      <button type="button" class="btn ghost small" id="viewSyncCodeBtn">View My Sync Code</button>
-    </div>
-    <div id="profileAddForm">
-      <label style="font-size:12px;font-weight:700;color:var(--ink-soft);display:block;margin-bottom:5px;">Add a learner</label>
-      <input type="text" id="newProfileName" placeholder="Name" maxlength="20" style="margin-bottom:10px;">
-      <div id="emojiPicker" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;"></div>
-      <div style="text-align:center;margin-bottom:14px;">
-        <button type="button" id="toggleSyncEntry" style="all:unset;font-size:12px;font-weight:700;color:var(--twilight-deep);text-decoration:underline;cursor:pointer;">Already have a sync code?</button>
-      </div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;">
-        <button class="btn ghost small" id="profileCancelBtn">Cancel</button>
-        <button class="btn lantern small" id="profileCreateBtn">Create Learner</button>
-      </div>
-    </div>
-    <div id="syncCodeEntryForm" style="display:none;">
-      <label style="font-size:12px;font-weight:700;color:var(--ink-soft);display:block;margin-bottom:5px;">Enter your sync code</label>
-      <input type="text" id="syncCodeInput" placeholder="e.g. BRAVE-K9" style="margin-bottom:8px;text-transform:uppercase;">
-      <p id="syncCodeError" style="font-size:12px;color:var(--coral);font-weight:700;min-height:16px;margin:0 0 10px;"></p>
-      <div style="text-align:center;margin-bottom:10px;">
-        <button type="button" id="backToAddForm" style="all:unset;font-size:12px;font-weight:700;color:var(--twilight-deep);text-decoration:underline;cursor:pointer;">Add a new learner instead</button>
-      </div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;">
-        <button class="btn ghost small" id="syncCancelBtn">Cancel</button>
-        <button class="btn lantern small" id="loadSyncBtn">Load My Progress</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay hidden" id="syncRevealModal">
-  <div class="modal-card" style="text-align:center;">
-    <h2 style="margin:0 0 6px;font-size:21px;color:var(--twilight-deep);font-family:var(--font-display);">Your Sync Code</h2>
-    <p style="margin:0 0 14px;font-size:13.5px;color:var(--ink-soft);font-weight:600;">Write this down. Enter it on another device to see this same progress there.</p>
-    <div id="syncCodeDisplay" style="font-size:26px;font-weight:800;letter-spacing:.06em;color:var(--twilight-deep);background:var(--paper-deep);border-radius:14px;padding:14px;margin-bottom:16px;font-family:monospace;"></div>
-    <div style="display:flex;justify-content:center;gap:10px;">
-      <button class="btn ghost" id="syncCopyBtn">Copy Code</button>
-      <button class="btn lantern" id="syncGotItBtn">Got it</button>
-    </div>
-  </div>
+  <div class="modal-card" id="profileModalCard"></div>
 </div>
 
 <div class="modal-overlay hidden" id="updateModal">
@@ -525,41 +482,77 @@ if(typeof firebase !== "undefined"){
   }catch(e){ db = null; }
 }
 
-const SYNC_CODE_WORDS = ["BRAVE","SUNNY","LIGHT","SWIFT","GOLDEN","GENTLE","MIGHTY","QUIET","BOLD","KIND","WISE","TRUE","HAPPY","STEADY","SHINY"];
-function generateSyncCode(){
-  const w = SYNC_CODE_WORDS[Math.floor(Math.random()*SYNC_CODE_WORDS.length)];
-  const letter = String.fromCharCode(65+Math.floor(Math.random()*26));
-  const num = Math.floor(Math.random()*90+10);
-  return w+"-"+letter+num;
+const SECURITY_QUESTIONS = [
+  "What is your favorite animal?",
+  "What is your favorite color?",
+  "What is your favorite food?",
+  "What city were you born in?",
+  "What is your pet's name?",
+  "Who is your favorite Bible character?"
+];
+
+async function sha256Hex(str){
+  const enc = new TextEncoder().encode(str);
+  const buf = await crypto.subtle.digest("SHA-256", enc);
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
 }
-async function cloudCodeExists(code){
-  if(!db) return false;
-  try{ const snap = await db.collection("profiles").doc(code).get(); return snap.exists; }catch(e){ return false; }
-}
-async function generateUniqueSyncCode(){
-  for(let i=0;i<5;i++){
-    const code = generateSyncCode();
-    if(!(await cloudCodeExists(code))) return code;
-  }
-  return generateSyncCode()+"-"+Date.now().toString(36).slice(-3);
-}
-async function cloudSave(code, dataObj){
-  if(!db || !code) return false;
-  try{ await db.collection("profiles").doc(code).set(dataObj); return true; }catch(e){ return false; }
-}
-async function cloudLoad(code){
-  if(!db || !code) return null;
+async function findAccountsByName(nameLower){
+  if(!db) return [];
   try{
-    const snap = await db.collection("profiles").doc(code).get();
+    const snap = await db.collection("accounts").where("nameLower","==",nameLower).get();
+    return snap.docs.map(d=>({id:d.id, data:d.data()}));
+  }catch(e){ return []; }
+}
+async function accountCombinationExists(nameLower, passwordHash, excludeId){
+  const candidates = await findAccountsByName(nameLower);
+  return candidates.some(c=> c.data.passwordHash===passwordHash && c.id!==excludeId);
+}
+async function createAccount({name, emoji, color, password, question, answer}){
+  if(!db) return {ok:false, reason:"offline"};
+  const nameLower = name.trim().toLowerCase();
+  const passwordHash = await sha256Hex(password);
+  if(await accountCombinationExists(nameLower, passwordHash, null)) return {ok:false, reason:"taken"};
+  const answerHash = await sha256Hex(answer.trim().toLowerCase());
+  const docData = Object.assign(
+    {nameLower, displayName:name.trim(), emoji, color, passwordHash, securityQuestion:question, securityAnswerHash:answerHash},
+    freshState()
+  );
+  try{
+    const ref = await db.collection("accounts").add(docData);
+    return {ok:true, id:ref.id, data:docData};
+  }catch(e){ return {ok:false, reason:"error"}; }
+}
+async function loginAccount(name, password){
+  if(!db) return null;
+  const nameLower = name.trim().toLowerCase();
+  const passwordHash = await sha256Hex(password);
+  const candidates = await findAccountsByName(nameLower);
+  return candidates.find(c=> c.data.passwordHash===passwordHash) || null;
+}
+async function verifySecurityAnswer(name, question, answer){
+  if(!db) return null;
+  const nameLower = name.trim().toLowerCase();
+  const answerHash = await sha256Hex(answer.trim().toLowerCase());
+  const candidates = await findAccountsByName(nameLower);
+  return candidates.find(c=> c.data.securityQuestion===question && c.data.securityAnswerHash===answerHash) || null;
+}
+async function resetPassword(accountId, nameLower, newPassword){
+  if(!db) return {ok:false, reason:"offline"};
+  const newHash = await sha256Hex(newPassword);
+  if(await accountCombinationExists(nameLower, newHash, accountId)) return {ok:false, reason:"taken"};
+  try{ await db.collection("accounts").doc(accountId).update({passwordHash:newHash}); return {ok:true}; }
+  catch(e){ return {ok:false, reason:"error"}; }
+}
+async function pushStateToCloud(){
+  if(!db || !currentProfile || !currentProfile.accountId) return;
+  try{ await db.collection("accounts").doc(currentProfile.accountId).update(state); }catch(e){}
+}
+async function loadAccountState(accountId){
+  if(!db) return null;
+  try{
+    const snap = await db.collection("accounts").doc(accountId).get();
     return snap.exists ? snap.data() : null;
   }catch(e){ return null; }
-}
-function cloudStateBlob(){
-  return Object.assign({}, state, {
-    profileName: currentProfile ? currentProfile.name : "",
-    profileEmoji: currentProfile ? currentProfile.emoji : "",
-    profileColor: currentProfile ? currentProfile.color : ""
-  });
 }
 
 /* =====================================================================
@@ -680,16 +673,17 @@ function saveState(){
     if(storageOk){
       try{ await window.storage.set(profileKey(currentProfile.id), JSON.stringify(state), false); }catch(e){}
     }
-    if(currentProfile.syncCode){ cloudSave(currentProfile.syncCode, cloudStateBlob()); }
+    if(currentProfile.accountId){ pushStateToCloud(); }
   }, 250);
 }
+function freshState(){
+  const verses = LIBRARY_VERSES.slice(0, BATCH_SIZE);
+  const progress = {};
+  verses.forEach(v=> progress[v.id] = {unlocked:1, streak:0, mastered:false, dueDay:0, fullPracticed:false});
+  return { verses, archivedVerses:[], backlog:[], progress, streak:0, lastPracticeDay:null, totalCorrect:0, totalAttempts:0 };
+}
 function seedDemo(){
-  state.verses = LIBRARY_VERSES.slice(0, BATCH_SIZE);
-  state.archivedVerses = [];
-  state.backlog = [];
-  state.progress = {};
-  state.verses.forEach(v=> state.progress[v.id] = {unlocked:1, streak:0, mastered:false, dueDay:0, fullPracticed:false});
-  state.streak=0; state.lastPracticeDay=null; state.totalCorrect=0; state.totalAttempts=0;
+  state = Object.assign(state, freshState());
 }
 
 /* =====================================================================
@@ -702,7 +696,6 @@ const PROFILE_EMOJIS = ["🦁","🐢","🦊","🐳","🦋","🐝","🍀","🌟",
 const PROFILE_COLORS = ["#e08e2b","#33415c","#6b8f5d","#c9694a","#8a6bb0","#3d7ea6"];
 let profiles = [];
 let currentProfile = null;
-let selectedEmoji = PROFILE_EMOJIS[0];
 
 async function loadProfilesList(){
   try{
@@ -732,55 +725,308 @@ function updateProfileChip(){
 }
 function renderAll(){ renderPath(); renderBook(); renderGames(); renderJourney(); }
 
+let modalScreen = "list";
+let draftSignup = {};
+let forgotFlow = {};
+
 function openProfileModal(forced){
   const modal = document.getElementById("profileModal");
   modal.classList.remove("hidden");
-  document.getElementById("profileCancelBtn").style.display = forced ? "none" : "";
-  document.getElementById("profileModalTitle").textContent = forced ? "Welcome! Who's learning?" : "Switch Learner";
-  document.getElementById("profileModalSub").textContent = forced
-    ? "Add the first learner to get started. Everyone keeps their own progress."
-    : "Pick a learner, or add a new one.";
-  document.getElementById("viewSyncCodeBtn").style.display = forced ? "none" : "";
-  document.getElementById("profileAddForm").style.display = "block";
-  document.getElementById("syncCodeEntryForm").style.display = "none";
-  document.getElementById("syncCodeInput").value = "";
-  document.getElementById("syncCodeError").textContent = "";
-  renderProfileList();
-  renderEmojiPicker();
-  document.getElementById("newProfileName").value = "";
+  draftSignup = {};
+  forgotFlow = {};
+  goScreen("list", forced);
 }
 function closeProfileModal(){ document.getElementById("profileModal").classList.add("hidden"); }
-function renderProfileList(){
-  const list = document.getElementById("profileList");
-  list.innerHTML = "";
+function goScreen(screen, forced){ modalScreen = screen; renderModalScreen(forced); }
+
+function renderModalScreen(forced){
+  const card = document.getElementById("profileModalCard");
+  if(modalScreen==="list") return renderListScreen(card, forced);
+  if(modalScreen==="signupName") return renderSignupNameScreen(card, forced);
+  if(modalScreen==="signupPassword") return renderSignupPasswordScreen(card, forced);
+  if(modalScreen==="signupSecurity") return renderSignupSecurityScreen(card, forced);
+  if(modalScreen==="login") return renderLoginScreen(card, forced);
+  if(modalScreen==="forgotName") return renderForgotNameScreen(card, forced);
+  if(modalScreen==="forgotAnswer") return renderForgotAnswerScreen(card, forced);
+  if(modalScreen==="forgotReset") return renderForgotResetScreen(card, forced);
+}
+
+function renderProfileListInto(container){
+  container.innerHTML = "";
   profiles.forEach(p=>{
     const row = document.createElement("button");
     row.type = "button";
     row.className = "profile-row"+(currentProfile && p.id===currentProfile.id ? " current":"");
     row.innerHTML = `<div class="avatar" style="background:${p.color}">${p.emoji}</div><div class="pname">${p.name}</div>${currentProfile && p.id===currentProfile.id ? '<div class="check">Playing</div>':''}`;
     row.onclick = ()=> switchProfile(p.id);
-    list.appendChild(row);
+    container.appendChild(row);
   });
 }
-function renderEmojiPicker(){
-  selectedEmoji = PROFILE_EMOJIS[0];
-  const picker = document.getElementById("emojiPicker");
-  picker.innerHTML = PROFILE_EMOJIS.map(e=>`<button type="button" class="emoji-opt ${e===selectedEmoji?'selected':''}" data-e="${e}">${e}</button>`).join("");
-  picker.querySelectorAll(".emoji-opt").forEach(btn=>{
+function renderEmojiPickerInto(container, selected, onPick){
+  container.innerHTML = PROFILE_EMOJIS.map(e=>`<button type="button" class="emoji-opt ${e===selected?'selected':''}" data-e="${e}">${e}</button>`).join("");
+  container.querySelectorAll(".emoji-opt").forEach(btn=>{
     btn.onclick = ()=>{
-      selectedEmoji = btn.dataset.e;
-      picker.querySelectorAll(".emoji-opt").forEach(b=>b.classList.toggle("selected", b===btn));
+      onPick(btn.dataset.e);
+      container.querySelectorAll(".emoji-opt").forEach(b=>b.classList.toggle("selected", b===btn));
     };
   });
 }
+
+function renderListScreen(card, forced){
+  card.innerHTML = `
+    <h2 style="margin:0 0 4px;font-size:22px;color:var(--twilight-deep);">${forced ? "Welcome!" : "Switch Learner"}</h2>
+    <p style="margin:0 0 16px;font-size:13.5px;color:var(--ink-soft);font-weight:600;">${forced ? "Create an account, or log in if you already made one on another device." : "Pick a learner already on this device, or add another."}</p>
+    <div id="profileList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;"></div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button class="btn lantern" id="goSignupBtn" type="button">Create New Account</button>
+      <button class="btn ghost" id="goLoginBtn" type="button">Log In on This Device</button>
+      ${forced ? "" : `<button class="btn ghost small" id="listCancelBtn" type="button" style="margin-top:6px;">Cancel</button>`}
+    </div>
+  `;
+  renderProfileListInto(document.getElementById("profileList"));
+  document.getElementById("goSignupBtn").onclick = ()=> goScreen("signupName", forced);
+  document.getElementById("goLoginBtn").onclick = ()=> goScreen("login", forced);
+  const cancelBtn = document.getElementById("listCancelBtn");
+  if(cancelBtn) cancelBtn.onclick = closeProfileModal;
+}
+
+function renderSignupNameScreen(card, forced){
+  if(!draftSignup.emoji) draftSignup.emoji = PROFILE_EMOJIS[0];
+  card.innerHTML = `
+    <h2 style="margin:0 0 4px;font-size:22px;color:var(--twilight-deep);">Who's learning?</h2>
+    <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft);font-weight:700;">Step 1 of 3 — name &amp; icon</p>
+    <input type="text" id="draftName" placeholder="Name" maxlength="20" value="${draftSignup.name||''}" style="margin-bottom:10px;">
+    <div id="emojiPicker" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;"></div>
+    <p id="signupNameError" style="font-size:12px;color:var(--coral);font-weight:700;min-height:16px;margin:0 0 6px;"></p>
+    <div style="display:flex;justify-content:space-between;gap:8px;">
+      <button class="btn ghost small" id="signupNameBack" type="button">Back</button>
+      <button class="btn lantern small" id="signupNameNext" type="button">Next</button>
+    </div>
+  `;
+  renderEmojiPickerInto(document.getElementById("emojiPicker"), draftSignup.emoji, e=> draftSignup.emoji=e);
+  document.getElementById("signupNameBack").onclick = ()=> goScreen("list", forced);
+  document.getElementById("signupNameNext").onclick = ()=>{
+    const name = document.getElementById("draftName").value.trim();
+    const err = document.getElementById("signupNameError");
+    if(!name){ err.textContent = "Enter a name."; return; }
+    draftSignup.name = name;
+    goScreen("signupPassword", forced);
+  };
+}
+
+function renderSignupPasswordScreen(card, forced){
+  card.innerHTML = `
+    <h2 style="margin:0 0 4px;font-size:22px;color:var(--twilight-deep);">Create a Password</h2>
+    <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft);font-weight:700;">Step 2 of 3 — you'll use this to log in on other devices</p>
+    <input type="password" id="draftPassword" placeholder="Password (at least 4 characters)" style="margin-bottom:10px;">
+    <input type="password" id="draftPasswordConfirm" placeholder="Type it again" style="margin-bottom:10px;">
+    <p id="signupPwError" style="font-size:12px;color:var(--coral);font-weight:700;min-height:16px;margin:0 0 6px;"></p>
+    <div style="display:flex;justify-content:space-between;gap:8px;">
+      <button class="btn ghost small" id="signupPwBack" type="button">Back</button>
+      <button class="btn lantern small" id="signupPwNext" type="button">Next</button>
+    </div>
+  `;
+  document.getElementById("signupPwBack").onclick = ()=> goScreen("signupName", forced);
+  document.getElementById("signupPwNext").onclick = ()=>{
+    const pw = document.getElementById("draftPassword").value;
+    const pw2 = document.getElementById("draftPasswordConfirm").value;
+    const err = document.getElementById("signupPwError");
+    if(pw.length<4){ err.textContent = "Password needs to be at least 4 characters."; return; }
+    if(pw!==pw2){ err.textContent = "Passwords don't match."; return; }
+    draftSignup.password = pw;
+    goScreen("signupSecurity", forced);
+  };
+}
+
+function renderSignupSecurityScreen(card, forced){
+  card.innerHTML = `
+    <h2 style="margin:0 0 4px;font-size:22px;color:var(--twilight-deep);">In Case You Forget</h2>
+    <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft);font-weight:700;">Step 3 of 3 — pick a question only you know the answer to</p>
+    <select id="draftQuestion" style="margin-bottom:10px;">
+      ${SECURITY_QUESTIONS.map(q=>`<option value="${q}">${q}</option>`).join("")}
+    </select>
+    <input type="text" id="draftAnswer" placeholder="Your answer" style="margin-bottom:10px;">
+    <p id="signupSecError" style="font-size:12px;color:var(--coral);font-weight:700;min-height:16px;margin:0 0 6px;"></p>
+    <div style="display:flex;justify-content:space-between;gap:8px;">
+      <button class="btn ghost small" id="signupSecBack" type="button">Back</button>
+      <button class="btn lantern small" id="signupSecFinish" type="button">Create Account</button>
+    </div>
+  `;
+  document.getElementById("signupSecBack").onclick = ()=> goScreen("signupPassword", forced);
+  document.getElementById("signupSecFinish").onclick = async ()=>{
+    const question = document.getElementById("draftQuestion").value;
+    const answer = document.getElementById("draftAnswer").value.trim();
+    const err = document.getElementById("signupSecError");
+    if(!answer){ err.textContent = "Enter an answer."; return; }
+    err.textContent = "Creating...";
+    const color = PROFILE_COLORS[profiles.length % PROFILE_COLORS.length];
+    const result = await createAccount({
+      name: draftSignup.name, emoji: draftSignup.emoji, color,
+      password: draftSignup.password, question, answer
+    });
+    if(!result.ok){
+      if(result.reason==="taken") err.textContent = "That name and password are already used together — try a different password.";
+      else if(result.reason==="offline") err.textContent = "Can't create an account right now — no connection.";
+      else err.textContent = "Something went wrong — try again.";
+      return;
+    }
+    const id = "p-"+Date.now();
+    const profile = {id, name: draftSignup.name, emoji: draftSignup.emoji, color, accountId: result.id};
+    profiles.push(profile);
+    await saveProfilesList();
+    currentProfile = profile;
+    await setActiveProfileId(id);
+    state = Object.assign({}, result.data);
+    saveState();
+    closeProfileModal();
+    renderAll();
+    updateProfileChip();
+    toast("Welcome, "+draftSignup.name+"! 🎉");
+  };
+}
+
+function renderLoginScreen(card, forced){
+  card.innerHTML = `
+    <h2 style="margin:0 0 4px;font-size:22px;color:var(--twilight-deep);">Log In</h2>
+    <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft);font-weight:700;">Enter the name and password you created before</p>
+    <input type="text" id="loginName" placeholder="Name" style="margin-bottom:10px;">
+    <input type="password" id="loginPassword" placeholder="Password" style="margin-bottom:8px;">
+    <p id="loginError" style="font-size:12px;color:var(--coral);font-weight:700;min-height:16px;margin:0 0 6px;"></p>
+    <div style="text-align:center;margin-bottom:10px;">
+      <button type="button" id="forgotPwLink" style="all:unset;font-size:12px;font-weight:700;color:var(--twilight-deep);text-decoration:underline;cursor:pointer;">Forgot password?</button>
+    </div>
+    <div style="display:flex;justify-content:space-between;gap:8px;">
+      <button class="btn ghost small" id="loginBack" type="button">Back</button>
+      <button class="btn lantern small" id="loginSubmit" type="button">Log In</button>
+    </div>
+  `;
+  document.getElementById("loginBack").onclick = ()=> goScreen("list", forced);
+  document.getElementById("forgotPwLink").onclick = ()=> goScreen("forgotName", forced);
+  document.getElementById("loginSubmit").onclick = async ()=>{
+    const name = document.getElementById("loginName").value.trim();
+    const password = document.getElementById("loginPassword").value;
+    const err = document.getElementById("loginError");
+    if(!name || !password){ err.textContent = "Enter both a name and password."; return; }
+    err.textContent = "Checking...";
+    const match = await loginAccount(name, password);
+    if(!match){ err.textContent = "Name or password didn't match — try again."; return; }
+    const id = "p-"+Date.now();
+    const profile = {id, name: match.data.displayName, emoji: match.data.emoji, color: match.data.color, accountId: match.id};
+    profiles.push(profile);
+    await saveProfilesList();
+    currentProfile = profile;
+    await setActiveProfileId(id);
+    state = Object.assign({}, match.data);
+    saveState();
+    closeProfileModal();
+    renderAll();
+    updateProfileChip();
+    toast("Welcome back, "+profile.name+"! ✨");
+  };
+}
+
+function renderForgotNameScreen(card, forced){
+  card.innerHTML = `
+    <h2 style="margin:0 0 4px;font-size:22px;color:var(--twilight-deep);">Forgot Password</h2>
+    <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft);font-weight:700;">What name did you use?</p>
+    <input type="text" id="forgotNameInput" placeholder="Name" style="margin-bottom:8px;">
+    <p id="forgotNameError" style="font-size:12px;color:var(--coral);font-weight:700;min-height:16px;margin:0 0 6px;"></p>
+    <div style="display:flex;justify-content:space-between;gap:8px;">
+      <button class="btn ghost small" id="forgotNameBack" type="button">Back</button>
+      <button class="btn lantern small" id="forgotNameNext" type="button">Next</button>
+    </div>
+  `;
+  document.getElementById("forgotNameBack").onclick = ()=> goScreen("login", forced);
+  document.getElementById("forgotNameNext").onclick = async ()=>{
+    const name = document.getElementById("forgotNameInput").value.trim();
+    const err = document.getElementById("forgotNameError");
+    if(!name){ err.textContent = "Enter a name."; return; }
+    err.textContent = "Looking...";
+    const candidates = await findAccountsByName(name.trim().toLowerCase());
+    if(!candidates.length){ err.textContent = "No account found with that name."; return; }
+    forgotFlow.name = name;
+    goScreen("forgotAnswer", forced);
+  };
+}
+
+function renderForgotAnswerScreen(card, forced){
+  card.innerHTML = `
+    <h2 style="margin:0 0 4px;font-size:22px;color:var(--twilight-deep);">Verify It's You</h2>
+    <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft);font-weight:700;">Pick the question you set, and answer it</p>
+    <select id="forgotQuestion" style="margin-bottom:10px;">
+      ${SECURITY_QUESTIONS.map(q=>`<option value="${q}">${q}</option>`).join("")}
+    </select>
+    <input type="text" id="forgotAnswerInput" placeholder="Your answer" style="margin-bottom:8px;">
+    <p id="forgotAnswerError" style="font-size:12px;color:var(--coral);font-weight:700;min-height:16px;margin:0 0 6px;"></p>
+    <div style="display:flex;justify-content:space-between;gap:8px;">
+      <button class="btn ghost small" id="forgotAnswerBack" type="button">Back</button>
+      <button class="btn lantern small" id="forgotAnswerNext" type="button">Verify</button>
+    </div>
+  `;
+  document.getElementById("forgotAnswerBack").onclick = ()=> goScreen("forgotName", forced);
+  document.getElementById("forgotAnswerNext").onclick = async ()=>{
+    const question = document.getElementById("forgotQuestion").value;
+    const answer = document.getElementById("forgotAnswerInput").value.trim();
+    const err = document.getElementById("forgotAnswerError");
+    if(!answer){ err.textContent = "Enter an answer."; return; }
+    err.textContent = "Checking...";
+    const match = await verifySecurityAnswer(forgotFlow.name, question, answer);
+    if(!match){ err.textContent = "That didn't match — check your question and answer."; return; }
+    forgotFlow.accountId = match.id;
+    forgotFlow.nameLower = match.data.nameLower;
+    forgotFlow.matchData = match.data;
+    goScreen("forgotReset", forced);
+  };
+}
+
+function renderForgotResetScreen(card, forced){
+  card.innerHTML = `
+    <h2 style="margin:0 0 4px;font-size:22px;color:var(--twilight-deep);">Set a New Password</h2>
+    <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft);font-weight:700;">You're verified — choose a new password</p>
+    <input type="password" id="forgotNewPw" placeholder="New password (at least 4 characters)" style="margin-bottom:10px;">
+    <input type="password" id="forgotNewPwConfirm" placeholder="Type it again" style="margin-bottom:8px;">
+    <p id="forgotResetError" style="font-size:12px;color:var(--coral);font-weight:700;min-height:16px;margin:0 0 6px;"></p>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button class="btn lantern small" id="forgotResetSubmit" type="button">Save New Password</button>
+    </div>
+  `;
+  document.getElementById("forgotResetSubmit").onclick = async ()=>{
+    const pw = document.getElementById("forgotNewPw").value;
+    const pw2 = document.getElementById("forgotNewPwConfirm").value;
+    const err = document.getElementById("forgotResetError");
+    if(pw.length<4){ err.textContent = "Password needs to be at least 4 characters."; return; }
+    if(pw!==pw2){ err.textContent = "Passwords don't match."; return; }
+    err.textContent = "Saving...";
+    const result = await resetPassword(forgotFlow.accountId, forgotFlow.nameLower, pw);
+    if(!result.ok){
+      if(result.reason==="taken") err.textContent = "That password is already used with this name — try another.";
+      else err.textContent = "Something went wrong — try again.";
+      return;
+    }
+    const id = "p-"+Date.now();
+    const d = forgotFlow.matchData;
+    const profile = {id, name: d.displayName, emoji: d.emoji, color: d.color, accountId: forgotFlow.accountId};
+    profiles.push(profile);
+    await saveProfilesList();
+    currentProfile = profile;
+    await setActiveProfileId(id);
+    state = Object.assign({}, d);
+    saveState();
+    closeProfileModal();
+    renderAll();
+    updateProfileChip();
+    toast("Password updated — welcome back, "+profile.name+"!");
+  };
+}
+
 async function switchProfile(id){
   const p = profiles.find(x=>x.id===id);
   if(!p) return;
   currentProfile = p;
   await setActiveProfileId(id);
   let loadedFromCloud = false;
-  if(p.syncCode){
-    const cloudData = await cloudLoad(p.syncCode);
+  if(p.accountId){
+    const cloudData = await loadAccountState(p.accountId);
     if(cloudData){ state = cloudData; loadedFromCloud = true; }
   }
   if(!loadedFromCloud) await loadState(id);
@@ -789,83 +1035,7 @@ async function switchProfile(id){
   updateProfileChip();
   toast("Playing as "+p.name);
 }
-async function createProfileFromForm(){
-  const name = document.getElementById("newProfileName").value.trim();
-  if(!name) return;
-  const id = "p-"+Date.now();
-  const color = PROFILE_COLORS[profiles.length % PROFILE_COLORS.length];
-  const emoji = selectedEmoji;
-  let syncCode = null;
-  if(db){ try{ syncCode = await generateUniqueSyncCode(); }catch(e){ syncCode = null; } }
-  const profile = {id, name, emoji, color, syncCode};
-  profiles.push(profile);
-  await saveProfilesList();
-  currentProfile = profile;
-  await setActiveProfileId(id);
-  await loadState(id);
-  if(syncCode) await cloudSave(syncCode, cloudStateBlob());
-  closeProfileModal();
-  renderAll();
-  updateProfileChip();
-  if(syncCode) showSyncCodeReveal(syncCode);
-  else toast("Welcome, "+name+"! 🎉");
-}
-function showSyncCodeReveal(code){
-  document.getElementById("syncCodeDisplay").textContent = code;
-  const modal = document.getElementById("syncRevealModal");
-  modal.classList.remove("hidden");
-  document.getElementById("syncCopyBtn").onclick = async ()=>{
-    try{ await navigator.clipboard.writeText(code); toast("Copied!"); }
-    catch(e){ toast("Your code: "+code); }
-  };
-  document.getElementById("syncGotItBtn").onclick = ()=> modal.classList.add("hidden");
-}
 document.getElementById("profileChipBtn").addEventListener("click", ()=> openProfileModal(false));
-document.getElementById("profileCancelBtn").addEventListener("click", closeProfileModal);
-document.getElementById("profileCreateBtn").addEventListener("click", createProfileFromForm);
-document.getElementById("viewSyncCodeBtn").addEventListener("click", ()=>{
-  if(currentProfile && currentProfile.syncCode) showSyncCodeReveal(currentProfile.syncCode);
-  else toast("This profile isn't synced yet.");
-});
-document.getElementById("toggleSyncEntry").addEventListener("click", ()=>{
-  document.getElementById("profileAddForm").style.display = "none";
-  document.getElementById("syncCodeEntryForm").style.display = "block";
-  document.getElementById("syncCodeError").textContent = "";
-});
-document.getElementById("backToAddForm").addEventListener("click", ()=>{
-  document.getElementById("syncCodeEntryForm").style.display = "none";
-  document.getElementById("profileAddForm").style.display = "block";
-});
-document.getElementById("syncCancelBtn").addEventListener("click", closeProfileModal);
-document.getElementById("loadSyncBtn").addEventListener("click", async ()=>{
-  const code = document.getElementById("syncCodeInput").value.trim().toUpperCase();
-  const errEl = document.getElementById("syncCodeError");
-  if(!code){ errEl.textContent = "Enter a code first."; return; }
-  errEl.textContent = "Looking...";
-  const data = await cloudLoad(code);
-  if(!data){
-    errEl.textContent = "No progress found for that code — double check it and try again.";
-    return;
-  }
-  const id = "p-"+Date.now();
-  const profile = {
-    id,
-    name: data.profileName || "Learner",
-    emoji: data.profileEmoji || PROFILE_EMOJIS[0],
-    color: data.profileColor || PROFILE_COLORS[0],
-    syncCode: code
-  };
-  profiles.push(profile);
-  await saveProfilesList();
-  currentProfile = profile;
-  await setActiveProfileId(id);
-  state = data;
-  saveState();
-  closeProfileModal();
-  renderAll();
-  updateProfileChip();
-  toast("Welcome back, "+profile.name+"! Synced ✨");
-});
 
 /* =====================================================================
    HELPERS
@@ -1587,8 +1757,8 @@ async function init(){
   currentProfile = match;
   await setActiveProfileId(currentProfile.id);
   let loadedFromCloud = false;
-  if(currentProfile.syncCode){
-    const cloudData = await cloudLoad(currentProfile.syncCode);
+  if(currentProfile.accountId){
+    const cloudData = await loadAccountState(currentProfile.accountId);
     if(cloudData){ state = cloudData; loadedFromCloud = true; }
   }
   if(!loadedFromCloud) await loadState(currentProfile.id);
