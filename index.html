@@ -31,7 +31,7 @@
     --shadow-btn:0 3px 0 rgba(0,0,0,.15);
   }
   *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;}
+  html,body{margin:0;padding:0;overscroll-behavior-y:contain;}
   body{
     background:
       radial-gradient(1200px 500px at 15% -10%, #fbf3dd 0%, transparent 60%),
@@ -267,6 +267,14 @@
   .modal-overlay{position:fixed;inset:0;background:rgba(33,44,64,.6);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;}
   .modal-overlay.hidden{display:none;}
   .modal-card{background:var(--white);border-radius:var(--radius-l);padding:26px;max-width:420px;width:100%;box-shadow:0 24px 70px rgba(0,0,0,.35);max-height:86vh;overflow-y:auto;}
+  .update-banner{
+    position:fixed; bottom:20px; right:20px; z-index:150;
+    background:var(--white); border:2px solid var(--paper-deep); border-radius:var(--radius-m);
+    box-shadow:var(--shadow-card); padding:12px 14px; display:flex; align-items:center; gap:10px;
+    max-width:calc(100vw - 40px);
+  }
+  .update-banner.hidden{ display:none; }
+  .update-banner span{ font-size:13px; font-weight:700; color:var(--ink); white-space:nowrap; }
   .profile-row{all:unset;display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:14px;border:2px solid var(--paper-deep);background:var(--paper);cursor:pointer;width:100%;box-sizing:border-box;}
   .profile-row.current{border-color:var(--lantern);background:#fdf1d6;}
   .profile-row .avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;flex:none;color:#fff;}
@@ -388,21 +396,10 @@
   <div class="modal-card" id="profileModalCard"></div>
 </div>
 
-<div class="modal-overlay hidden" id="updateModal">
-  <div class="modal-card" style="text-align:center;">
-    <div style="width:56px;height:56px;border-radius:50%;background:var(--twilight);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;box-shadow:0 0 0 4px var(--lantern-glow) inset;">
-      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:26px;height:26px;">
-        <path d="M12 2v3M9 5h6l1.4 4.5a4.4 4.4 0 01-4.4 5.7 4.4 4.4 0 01-4.4-5.7L9 5z" stroke="#f6c567" stroke-width="1.6" stroke-linejoin="round"/>
-        <path d="M10 17h4l-.6 4.2a1 1 0 01-1 .8h-.8a1 1 0 01-1-.8L10 17z" stroke="#f6c567" stroke-width="1.6" stroke-linejoin="round"/>
-      </svg>
-    </div>
-    <h2 style="margin:0 0 6px;font-size:21px;color:var(--twilight-deep);font-family:var(--font-display);">A new version is ready</h2>
-    <p style="margin:0 0 20px;font-size:13.5px;color:var(--ink-soft);font-weight:600;">Update now, or keep playing this version — you'll be asked again next time you visit.</p>
-    <div style="display:flex;justify-content:center;gap:10px;">
-      <button class="btn ghost" id="updateLaterBtn">Later</button>
-      <button class="btn lantern" id="updateNowBtn">Update Now</button>
-    </div>
-  </div>
+<div class="update-banner hidden" id="updateBanner">
+  <span>🏮 A new version is ready</span>
+  <button class="btn ghost small" id="updateLaterBtn" type="button">Dismiss</button>
+  <button class="btn lantern small" id="updateNowBtn" type="button">Update</button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -1828,14 +1825,14 @@ async function checkForUpdate(){
   }catch(e){ /* offline, opened as a local file, or GitHub unreachable */ }
 }
 function showUpdateModal(latestSha){
-  const modal = document.getElementById("updateModal");
-  modal.classList.remove("hidden");
+  const banner = document.getElementById("updateBanner");
+  banner.classList.remove("hidden");
   document.getElementById("updateNowBtn").onclick = async ()=>{
     await window.storage.set(UPDATE_SEEN_KEY, latestSha, false);
     location.reload();
   };
   document.getElementById("updateLaterBtn").onclick = ()=>{
-    modal.classList.add("hidden"); // seen key is deliberately left unchanged so it asks again next visit
+    banner.classList.add("hidden"); // seen key is deliberately left unchanged so it asks again next visit
   };
 }
 setTimeout(checkForUpdate, 1500);
