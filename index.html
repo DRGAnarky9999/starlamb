@@ -388,15 +388,45 @@
   <div class="modal-card">
     <h2 id="profileModalTitle" style="margin:0 0 4px;font-size:22px;color:var(--twilight-deep);">Who's learning?</h2>
     <p id="profileModalSub" style="margin:0 0 16px;font-size:13.5px;color:var(--ink-soft);font-weight:600;">Pick a learner, or add a new one. Everyone keeps their own progress.</p>
-    <div id="profileList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px;"></div>
+    <div id="profileList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;"></div>
+    <div style="text-align:center;margin-bottom:14px;">
+      <button type="button" class="btn ghost small" id="viewSyncCodeBtn">View My Sync Code</button>
+    </div>
     <div id="profileAddForm">
       <label style="font-size:12px;font-weight:700;color:var(--ink-soft);display:block;margin-bottom:5px;">Add a learner</label>
       <input type="text" id="newProfileName" placeholder="Name" maxlength="20" style="margin-bottom:10px;">
-      <div id="emojiPicker" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;"></div>
+      <div id="emojiPicker" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;"></div>
+      <div style="text-align:center;margin-bottom:14px;">
+        <button type="button" id="toggleSyncEntry" style="all:unset;font-size:12px;font-weight:700;color:var(--twilight-deep);text-decoration:underline;cursor:pointer;">Already have a sync code?</button>
+      </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;">
         <button class="btn ghost small" id="profileCancelBtn">Cancel</button>
         <button class="btn lantern small" id="profileCreateBtn">Create Learner</button>
       </div>
+    </div>
+    <div id="syncCodeEntryForm" style="display:none;">
+      <label style="font-size:12px;font-weight:700;color:var(--ink-soft);display:block;margin-bottom:5px;">Enter your sync code</label>
+      <input type="text" id="syncCodeInput" placeholder="e.g. BRAVE-K9" style="margin-bottom:8px;text-transform:uppercase;">
+      <p id="syncCodeError" style="font-size:12px;color:var(--coral);font-weight:700;min-height:16px;margin:0 0 10px;"></p>
+      <div style="text-align:center;margin-bottom:10px;">
+        <button type="button" id="backToAddForm" style="all:unset;font-size:12px;font-weight:700;color:var(--twilight-deep);text-decoration:underline;cursor:pointer;">Add a new learner instead</button>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button class="btn ghost small" id="syncCancelBtn">Cancel</button>
+        <button class="btn lantern small" id="loadSyncBtn">Load My Progress</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="syncRevealModal">
+  <div class="modal-card" style="text-align:center;">
+    <h2 style="margin:0 0 6px;font-size:21px;color:var(--twilight-deep);font-family:var(--font-display);">Your Sync Code</h2>
+    <p style="margin:0 0 14px;font-size:13.5px;color:var(--ink-soft);font-weight:600;">Write this down. Enter it on another device to see this same progress there.</p>
+    <div id="syncCodeDisplay" style="font-size:26px;font-weight:800;letter-spacing:.06em;color:var(--twilight-deep);background:var(--paper-deep);border-radius:14px;padding:14px;margin-bottom:16px;font-family:monospace;"></div>
+    <div style="display:flex;justify-content:center;gap:10px;">
+      <button class="btn ghost" id="syncCopyBtn">Copy Code</button>
+      <button class="btn lantern" id="syncGotItBtn">Got it</button>
     </div>
   </div>
 </div>
@@ -420,6 +450,8 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script>
 (function(){
 
@@ -469,6 +501,65 @@ if(!window.storage){
       }catch(e){ return null; }
     }
   };
+}
+
+/* =====================================================================
+   CLOUD SYNC — lets a learner's progress follow them across devices via
+   a short "sync code" instead of a full account/login. Uses Firestore;
+   fails silently (falling back to local-only storage) if unavailable.
+===================================================================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyC_kxNxAjK4NS7cJY5nA5-QsxrKPR2j2-k",
+  authDomain: "starlamb-a6e8c.firebaseapp.com",
+  projectId: "starlamb-a6e8c",
+  storageBucket: "starlamb-a6e8c.firebasestorage.app",
+  messagingSenderId: "987590493079",
+  appId: "1:987590493079:web:81a743159c31170b383ad2",
+  measurementId: "G-1H0FRLPTZ7"
+};
+let db = null;
+if(typeof firebase !== "undefined"){
+  try{
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+  }catch(e){ db = null; }
+}
+
+const SYNC_CODE_WORDS = ["BRAVE","SUNNY","LIGHT","SWIFT","GOLDEN","GENTLE","MIGHTY","QUIET","BOLD","KIND","WISE","TRUE","HAPPY","STEADY","SHINY"];
+function generateSyncCode(){
+  const w = SYNC_CODE_WORDS[Math.floor(Math.random()*SYNC_CODE_WORDS.length)];
+  const letter = String.fromCharCode(65+Math.floor(Math.random()*26));
+  const num = Math.floor(Math.random()*90+10);
+  return w+"-"+letter+num;
+}
+async function cloudCodeExists(code){
+  if(!db) return false;
+  try{ const snap = await db.collection("profiles").doc(code).get(); return snap.exists; }catch(e){ return false; }
+}
+async function generateUniqueSyncCode(){
+  for(let i=0;i<5;i++){
+    const code = generateSyncCode();
+    if(!(await cloudCodeExists(code))) return code;
+  }
+  return generateSyncCode()+"-"+Date.now().toString(36).slice(-3);
+}
+async function cloudSave(code, dataObj){
+  if(!db || !code) return false;
+  try{ await db.collection("profiles").doc(code).set(dataObj); return true; }catch(e){ return false; }
+}
+async function cloudLoad(code){
+  if(!db || !code) return null;
+  try{
+    const snap = await db.collection("profiles").doc(code).get();
+    return snap.exists ? snap.data() : null;
+  }catch(e){ return null; }
+}
+function cloudStateBlob(){
+  return Object.assign({}, state, {
+    profileName: currentProfile ? currentProfile.name : "",
+    profileEmoji: currentProfile ? currentProfile.emoji : "",
+    profileColor: currentProfile ? currentProfile.color : ""
+  });
 }
 
 /* =====================================================================
@@ -583,10 +674,13 @@ async function loadState(id){
 }
 let saveTimer=null;
 function saveState(){
-  if(!storageOk || !currentProfile) return;
+  if(!currentProfile) return;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async ()=>{
-    try{ await window.storage.set(profileKey(currentProfile.id), JSON.stringify(state), false); }catch(e){}
+    if(storageOk){
+      try{ await window.storage.set(profileKey(currentProfile.id), JSON.stringify(state), false); }catch(e){}
+    }
+    if(currentProfile.syncCode){ cloudSave(currentProfile.syncCode, cloudStateBlob()); }
   }, 250);
 }
 function seedDemo(){
@@ -646,6 +740,11 @@ function openProfileModal(forced){
   document.getElementById("profileModalSub").textContent = forced
     ? "Add the first learner to get started. Everyone keeps their own progress."
     : "Pick a learner, or add a new one.";
+  document.getElementById("viewSyncCodeBtn").style.display = forced ? "none" : "";
+  document.getElementById("profileAddForm").style.display = "block";
+  document.getElementById("syncCodeEntryForm").style.display = "none";
+  document.getElementById("syncCodeInput").value = "";
+  document.getElementById("syncCodeError").textContent = "";
   renderProfileList();
   renderEmojiPicker();
   document.getElementById("newProfileName").value = "";
@@ -679,7 +778,12 @@ async function switchProfile(id){
   if(!p) return;
   currentProfile = p;
   await setActiveProfileId(id);
-  await loadState(id);
+  let loadedFromCloud = false;
+  if(p.syncCode){
+    const cloudData = await cloudLoad(p.syncCode);
+    if(cloudData){ state = cloudData; loadedFromCloud = true; }
+  }
+  if(!loadedFromCloud) await loadState(id);
   closeProfileModal();
   renderAll();
   updateProfileChip();
@@ -690,20 +794,78 @@ async function createProfileFromForm(){
   if(!name) return;
   const id = "p-"+Date.now();
   const color = PROFILE_COLORS[profiles.length % PROFILE_COLORS.length];
-  const profile = {id, name, emoji:selectedEmoji, color};
+  const emoji = selectedEmoji;
+  let syncCode = null;
+  if(db){ try{ syncCode = await generateUniqueSyncCode(); }catch(e){ syncCode = null; } }
+  const profile = {id, name, emoji, color, syncCode};
   profiles.push(profile);
   await saveProfilesList();
   currentProfile = profile;
   await setActiveProfileId(id);
   await loadState(id);
+  if(syncCode) await cloudSave(syncCode, cloudStateBlob());
   closeProfileModal();
   renderAll();
   updateProfileChip();
-  toast("Welcome, "+name+"! 🎉");
+  if(syncCode) showSyncCodeReveal(syncCode);
+  else toast("Welcome, "+name+"! 🎉");
+}
+function showSyncCodeReveal(code){
+  document.getElementById("syncCodeDisplay").textContent = code;
+  const modal = document.getElementById("syncRevealModal");
+  modal.classList.remove("hidden");
+  document.getElementById("syncCopyBtn").onclick = async ()=>{
+    try{ await navigator.clipboard.writeText(code); toast("Copied!"); }
+    catch(e){ toast("Your code: "+code); }
+  };
+  document.getElementById("syncGotItBtn").onclick = ()=> modal.classList.add("hidden");
 }
 document.getElementById("profileChipBtn").addEventListener("click", ()=> openProfileModal(false));
 document.getElementById("profileCancelBtn").addEventListener("click", closeProfileModal);
 document.getElementById("profileCreateBtn").addEventListener("click", createProfileFromForm);
+document.getElementById("viewSyncCodeBtn").addEventListener("click", ()=>{
+  if(currentProfile && currentProfile.syncCode) showSyncCodeReveal(currentProfile.syncCode);
+  else toast("This profile isn't synced yet.");
+});
+document.getElementById("toggleSyncEntry").addEventListener("click", ()=>{
+  document.getElementById("profileAddForm").style.display = "none";
+  document.getElementById("syncCodeEntryForm").style.display = "block";
+  document.getElementById("syncCodeError").textContent = "";
+});
+document.getElementById("backToAddForm").addEventListener("click", ()=>{
+  document.getElementById("syncCodeEntryForm").style.display = "none";
+  document.getElementById("profileAddForm").style.display = "block";
+});
+document.getElementById("syncCancelBtn").addEventListener("click", closeProfileModal);
+document.getElementById("loadSyncBtn").addEventListener("click", async ()=>{
+  const code = document.getElementById("syncCodeInput").value.trim().toUpperCase();
+  const errEl = document.getElementById("syncCodeError");
+  if(!code){ errEl.textContent = "Enter a code first."; return; }
+  errEl.textContent = "Looking...";
+  const data = await cloudLoad(code);
+  if(!data){
+    errEl.textContent = "No progress found for that code — double check it and try again.";
+    return;
+  }
+  const id = "p-"+Date.now();
+  const profile = {
+    id,
+    name: data.profileName || "Learner",
+    emoji: data.profileEmoji || PROFILE_EMOJIS[0],
+    color: data.profileColor || PROFILE_COLORS[0],
+    syncCode: code
+  };
+  profiles.push(profile);
+  await saveProfilesList();
+  currentProfile = profile;
+  await setActiveProfileId(id);
+  state = data;
+  saveState();
+  closeProfileModal();
+  renderAll();
+  updateProfileChip();
+  toast("Welcome back, "+profile.name+"! Synced ✨");
+});
 
 /* =====================================================================
    HELPERS
@@ -1424,7 +1586,12 @@ async function init(){
   }
   currentProfile = match;
   await setActiveProfileId(currentProfile.id);
-  await loadState(currentProfile.id);
+  let loadedFromCloud = false;
+  if(currentProfile.syncCode){
+    const cloudData = await cloudLoad(currentProfile.syncCode);
+    if(cloudData){ state = cloudData; loadedFromCloud = true; }
+  }
+  if(!loadedFromCloud) await loadState(currentProfile.id);
   renderAll();
   updateProfileChip();
 }
