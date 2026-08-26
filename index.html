@@ -205,7 +205,7 @@
   @media (max-width:560px){ form.add-verse{grid-template-columns:1fr;} }
   form.add-verse label{font-size:12px;font-weight:700;color:var(--ink-soft);display:block;margin-bottom:5px;}
   form.add-verse .hint{font-size:11.5px;color:var(--ink-soft);font-weight:600;margin-top:-4px;}
-  input[type=text],textarea,select{font-family:var(--font-body);font-weight:600;font-size:14px;padding:10px 12px;border:2px solid var(--paper-deep);border-radius:var(--radius-s);background:var(--paper);color:var(--ink);width:100%;}
+  input[type=text],input[type=password],textarea,select{font-family:var(--font-body);font-weight:600;font-size:14px;padding:10px 12px;border:2px solid var(--paper-deep);border-radius:var(--radius-s);background:var(--paper);color:var(--ink);width:100%;}
   textarea{resize:vertical;min-height:64px;}
   input:focus,textarea:focus,select:focus{border-color:var(--twilight);outline:none;}
 
@@ -717,7 +717,14 @@ async function setActiveProfileId(id){
 }
 function updateProfileChip(){
   const chip = document.getElementById("profileChipBtn");
-  if(!currentProfile || !chip) return;
+  if(!chip) return;
+  if(!currentProfile){
+    chip.style.background = "";
+    chip.style.color = "";
+    chip.style.borderColor = "";
+    chip.textContent = "🙂 Log In";
+    return;
+  }
   chip.style.background = currentProfile.color;
   chip.style.color = "#fff";
   chip.style.borderColor = currentProfile.color;
@@ -773,9 +780,16 @@ function renderEmojiPickerInto(container, selected, onPick){
 }
 
 function renderListScreen(card, forced){
+  const currentBlock = (!forced && currentProfile) ? `
+    <div style="display:flex;align-items:center;justify-content:space-between;background:var(--paper);border:2px solid var(--paper-deep);border-radius:14px;padding:10px 14px;margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:700;color:var(--ink);">Playing as ${currentProfile.emoji} ${currentProfile.name}</div>
+      <button type="button" class="btn ghost small" id="logOutBtn">Log Out</button>
+    </div>
+  ` : "";
   card.innerHTML = `
     <h2 style="margin:0 0 4px;font-size:22px;color:var(--twilight-deep);">${forced ? "Welcome!" : "Switch Learner"}</h2>
     <p style="margin:0 0 16px;font-size:13.5px;color:var(--ink-soft);font-weight:600;">${forced ? "Create an account, or log in if you already made one on another device." : "Pick a learner already on this device, or add another."}</p>
+    ${currentBlock}
     <div id="profileList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;"></div>
     <div style="display:flex;flex-direction:column;gap:8px;">
       <button class="btn lantern" id="goSignupBtn" type="button">Create New Account</button>
@@ -786,6 +800,8 @@ function renderListScreen(card, forced){
   renderProfileListInto(document.getElementById("profileList"));
   document.getElementById("goSignupBtn").onclick = ()=> goScreen("signupName", forced);
   document.getElementById("goLoginBtn").onclick = ()=> goScreen("login", forced);
+  const logOutBtn = document.getElementById("logOutBtn");
+  if(logOutBtn) logOutBtn.onclick = logOutCurrentProfile;
   const cancelBtn = document.getElementById("listCancelBtn");
   if(cancelBtn) cancelBtn.onclick = closeProfileModal;
 }
@@ -795,7 +811,7 @@ function renderSignupNameScreen(card, forced){
   card.innerHTML = `
     <h2 style="margin:0 0 4px;font-size:22px;color:var(--twilight-deep);">Who's learning?</h2>
     <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft);font-weight:700;">Step 1 of 3 — name &amp; icon</p>
-    <input type="text" id="draftName" placeholder="Name" maxlength="20" value="${draftSignup.name||''}" style="margin-bottom:10px;">
+    <input type="text" id="draftName" placeholder="Name" maxlength="20" value="${draftSignup.name||''}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" style="margin-bottom:10px;">
     <div id="emojiPicker" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;"></div>
     <p id="signupNameError" style="font-size:12px;color:var(--coral);font-weight:700;min-height:16px;margin:0 0 6px;"></p>
     <div style="display:flex;justify-content:space-between;gap:8px;">
@@ -818,8 +834,8 @@ function renderSignupPasswordScreen(card, forced){
   card.innerHTML = `
     <h2 style="margin:0 0 4px;font-size:22px;color:var(--twilight-deep);">Create a Password</h2>
     <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft);font-weight:700;">Step 2 of 3 — you'll use this to log in on other devices</p>
-    <input type="password" id="draftPassword" placeholder="Password (at least 4 characters)" style="margin-bottom:10px;">
-    <input type="password" id="draftPasswordConfirm" placeholder="Type it again" style="margin-bottom:10px;">
+    <input type="password" id="draftPassword" placeholder="Password (at least 4 characters)" autocomplete="new-password" style="margin-bottom:10px;">
+    <input type="password" id="draftPasswordConfirm" placeholder="Type it again" autocomplete="new-password" style="margin-bottom:10px;">
     <p id="signupPwError" style="font-size:12px;color:var(--coral);font-weight:700;min-height:16px;margin:0 0 6px;"></p>
     <div style="display:flex;justify-content:space-between;gap:8px;">
       <button class="btn ghost small" id="signupPwBack" type="button">Back</button>
@@ -845,7 +861,7 @@ function renderSignupSecurityScreen(card, forced){
     <select id="draftQuestion" style="margin-bottom:10px;">
       ${SECURITY_QUESTIONS.map(q=>`<option value="${q}">${q}</option>`).join("")}
     </select>
-    <input type="text" id="draftAnswer" placeholder="Your answer" style="margin-bottom:10px;">
+    <input type="text" id="draftAnswer" placeholder="Your answer" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" style="margin-bottom:10px;">
     <p id="signupSecError" style="font-size:12px;color:var(--coral);font-weight:700;min-height:16px;margin:0 0 6px;"></p>
     <div style="display:flex;justify-content:space-between;gap:8px;">
       <button class="btn ghost small" id="signupSecBack" type="button">Back</button>
@@ -889,8 +905,8 @@ function renderLoginScreen(card, forced){
   card.innerHTML = `
     <h2 style="margin:0 0 4px;font-size:22px;color:var(--twilight-deep);">Log In</h2>
     <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft);font-weight:700;">Enter the name and password you created before</p>
-    <input type="text" id="loginName" placeholder="Name" style="margin-bottom:10px;">
-    <input type="password" id="loginPassword" placeholder="Password" style="margin-bottom:8px;">
+    <input type="text" id="loginName" placeholder="Name" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" style="margin-bottom:10px;">
+    <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password" style="margin-bottom:8px;">
     <p id="loginError" style="font-size:12px;color:var(--coral);font-weight:700;min-height:16px;margin:0 0 6px;"></p>
     <div style="text-align:center;margin-bottom:10px;">
       <button type="button" id="forgotPwLink" style="all:unset;font-size:12px;font-weight:700;color:var(--twilight-deep);text-decoration:underline;cursor:pointer;">Forgot password?</button>
@@ -929,7 +945,7 @@ function renderForgotNameScreen(card, forced){
   card.innerHTML = `
     <h2 style="margin:0 0 4px;font-size:22px;color:var(--twilight-deep);">Forgot Password</h2>
     <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft);font-weight:700;">What name did you use?</p>
-    <input type="text" id="forgotNameInput" placeholder="Name" style="margin-bottom:8px;">
+    <input type="text" id="forgotNameInput" placeholder="Name" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" style="margin-bottom:8px;">
     <p id="forgotNameError" style="font-size:12px;color:var(--coral);font-weight:700;min-height:16px;margin:0 0 6px;"></p>
     <div style="display:flex;justify-content:space-between;gap:8px;">
       <button class="btn ghost small" id="forgotNameBack" type="button">Back</button>
@@ -956,7 +972,7 @@ function renderForgotAnswerScreen(card, forced){
     <select id="forgotQuestion" style="margin-bottom:10px;">
       ${SECURITY_QUESTIONS.map(q=>`<option value="${q}">${q}</option>`).join("")}
     </select>
-    <input type="text" id="forgotAnswerInput" placeholder="Your answer" style="margin-bottom:8px;">
+    <input type="text" id="forgotAnswerInput" placeholder="Your answer" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" style="margin-bottom:8px;">
     <p id="forgotAnswerError" style="font-size:12px;color:var(--coral);font-weight:700;min-height:16px;margin:0 0 6px;"></p>
     <div style="display:flex;justify-content:space-between;gap:8px;">
       <button class="btn ghost small" id="forgotAnswerBack" type="button">Back</button>
@@ -983,8 +999,8 @@ function renderForgotResetScreen(card, forced){
   card.innerHTML = `
     <h2 style="margin:0 0 4px;font-size:22px;color:var(--twilight-deep);">Set a New Password</h2>
     <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft);font-weight:700;">You're verified — choose a new password</p>
-    <input type="password" id="forgotNewPw" placeholder="New password (at least 4 characters)" style="margin-bottom:10px;">
-    <input type="password" id="forgotNewPwConfirm" placeholder="Type it again" style="margin-bottom:8px;">
+    <input type="password" id="forgotNewPw" placeholder="New password (at least 4 characters)" autocomplete="new-password" style="margin-bottom:10px;">
+    <input type="password" id="forgotNewPwConfirm" placeholder="Type it again" autocomplete="new-password" style="margin-bottom:8px;">
     <p id="forgotResetError" style="font-size:12px;color:var(--coral);font-weight:700;min-height:16px;margin:0 0 6px;"></p>
     <div style="display:flex;justify-content:flex-end;gap:8px;">
       <button class="btn lantern small" id="forgotResetSubmit" type="button">Save New Password</button>
@@ -1034,6 +1050,19 @@ async function switchProfile(id){
   renderAll();
   updateProfileChip();
   toast("Playing as "+p.name);
+}
+async function logOutCurrentProfile(){
+  if(!currentProfile) return;
+  const name = currentProfile.name;
+  profiles = profiles.filter(p=>p.id!==currentProfile.id);
+  await saveProfilesList();
+  currentProfile = null;
+  await setActiveProfileId("");
+  state = { verses: [], archivedVerses: [], backlog: [], progress: {}, streak:0, lastPracticeDay:null, totalCorrect:0, totalAttempts:0 };
+  renderAll();
+  updateProfileChip();
+  toast("Logged out of "+name);
+  goScreen("list", true);
 }
 document.getElementById("profileChipBtn").addEventListener("click", ()=> openProfileModal(false));
 
