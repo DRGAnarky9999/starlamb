@@ -369,7 +369,7 @@
   </section>
 
   <section class="view" id="view-games">
-    <div class="view-head"><h2>Games</h2><p>Pick a game — each one only uses the part of each verse you've unlocked so far.</p></div>
+    <div class="view-head"><h2>Games</h2><p>Pick a game — each one only uses the part of each verse you've unlocked so far. These are just for fun and practice; only Memory Flip's Final Test marks a verse as mastered.</p></div>
     <div class="games-grid" id="gamesGrid"></div>
     <div class="view-head" style="margin-top:30px;"><h2>Story Adventures</h2><p>Put the big moments of a story back in order.</p></div>
     <div class="games-grid" id="storyGrid"></div>
@@ -1432,6 +1432,14 @@ function finishAttempt(v, correct, opts){
   else if(result.readyFinal) toast(v.ref+" is ready for the Final Test! 📝");
   return result;
 }
+function recordPracticeOnly(v, correct){
+  // Used by Word Gaps, Puzzle Builder, and Which Verse? — these are just for
+  // fun/practice and never touch a verse's unlocked parts, mastery, or
+  // review schedule. Only Memory Flip's part-by-part system + Final Test
+  // actually advances Path progress.
+  session.attempts++; if(correct) session.correct++;
+  updatePlaySub();
+}
 function renderNextButton(v){
   const controls = document.querySelector(".stage-controls");
   const staysOnVerse = session.module==="flashcard" && !isMastered(v);
@@ -1602,7 +1610,7 @@ function renderFillBlank(v, stepLabel, wrap){
         const fb=document.getElementById("fbFeedback");
         fb.textContent = ok ? "Correct! All words matched." : "Not quite — some words were off.";
         fb.className = "feedback "+(ok?"ok":"bad");
-        finishAttempt(v, ok);
+        recordPracticeOnly(v, ok);
         renderNextButton(v);
       };
     }
@@ -1636,7 +1644,7 @@ function renderWordOrder(v, stepLabel, wrap){
         const fb=document.getElementById("woFeedback");
         fb.textContent = correct ? "Correct! Perfect order!" : "Not quite the right order.";
         fb.className="feedback "+(correct?"ok":"bad");
-        finishAttempt(v, correct);
+        recordPracticeOnly(v, correct);
         const controls = document.querySelector(".stage-controls");
         if(correct){
           renderNextButton(v);
@@ -1676,7 +1684,7 @@ function renderReferenceMatch(v, stepLabel, wrap){
       const fb=document.getElementById("rmFeedback");
       fb.textContent = correct ? "Correct! That's the one!" : "Not quite — the right one is highlighted.";
       fb.className="feedback "+(correct?"ok":"bad");
-      finishAttempt(v, correct);
+      recordPracticeOnly(v, correct);
       renderNextButton(v);
     };
   });
