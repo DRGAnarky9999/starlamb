@@ -271,6 +271,29 @@
   .story-pool{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:560px;}
 
   .toast{position:fixed;bottom:20px;left:50%;transform:translate(-50%,10px);background:var(--twilight-deep);color:var(--white);padding:12px 20px;font-weight:700;font-size:13.5px;border-radius:30px;box-shadow:0 8px 24px rgba(0,0,0,.25);opacity:0;transition:all .25s ease;pointer-events:none;z-index:50;}
+
+  .ach-popup{
+    position:fixed; top:80px; left:50%; z-index:300;
+    background:var(--white); border:3px solid var(--lantern); border-radius:var(--radius-l);
+    box-shadow:0 20px 60px rgba(0,0,0,.3); padding:22px 30px; text-align:center; max-width:300px;
+    opacity:0; pointer-events:none; transform:translate(-50%,-20px) scale(.85);
+  }
+  .ach-popup.show{ animation:achPopIn .5s cubic-bezier(.34,1.56,.64,1) forwards; pointer-events:auto; }
+  .ach-popup.hide{ animation:achPopOut .3s ease forwards; }
+  @keyframes achPopIn{
+    0%{ opacity:0; transform:translate(-50%,-20px) scale(.8); }
+    60%{ opacity:1; transform:translate(-50%,4px) scale(1.06); }
+    100%{ opacity:1; transform:translate(-50%,0) scale(1); }
+  }
+  @keyframes achPopOut{
+    0%{ opacity:1; transform:translate(-50%,0) scale(1); }
+    100%{ opacity:0; transform:translate(-50%,-10px) scale(.9); }
+  }
+  .ach-popup-cong{font-family:var(--font-display);font-size:12.5px;font-weight:700;color:var(--lantern-deep);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;}
+  .ach-popup-icon{font-size:46px;margin-bottom:6px;line-height:1;}
+  .ach-popup h3{margin:0 0 4px;font-size:19px;color:var(--twilight-deep);}
+  .ach-popup p{margin:0;font-size:12.5px;color:var(--ink-soft);font-weight:600;}
+  .ach-popup-close{position:absolute;top:8px;right:10px;background:none;border:none;font-size:14px;color:var(--ink-soft);cursor:pointer;padding:4px;}
   .toast.show{opacity:1;transform:translate(-50%,0);}
 
   .modal-overlay{position:fixed;inset:0;background:rgba(33,44,64,.6);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;}
@@ -444,6 +467,14 @@
   <span>🏮 A new version is ready</span>
   <button class="btn ghost small" id="updateLaterBtn" type="button">Dismiss</button>
   <button class="btn lantern small" id="updateNowBtn" type="button">Update</button>
+</div>
+
+<div class="ach-popup" id="achPopup">
+  <button class="ach-popup-close" id="achPopupClose" type="button">✕</button>
+  <div class="ach-popup-cong">🎉 Congratulations!</div>
+  <div class="ach-popup-icon" id="achPopupIcon">⭐</div>
+  <h3 id="achPopupTitle">Achievement</h3>
+  <p id="achPopupDesc">Description</p>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -1997,8 +2028,33 @@ function checkAchievements(){
   });
   if(newOnes.length){
     saveState();
-    newOnes.forEach(a=> toast("Achievement unlocked: "+a.icon+" "+a.title+"!"));
+    newOnes.forEach(a=> showAchievementPopup(a));
   }
+}
+let achPopupQueue = [];
+let achPopupShowing = false;
+function showAchievementPopup(a){
+  achPopupQueue.push(a);
+  if(!achPopupShowing) advanceAchPopupQueue();
+}
+function advanceAchPopupQueue(){
+  if(!achPopupQueue.length){ achPopupShowing = false; return; }
+  achPopupShowing = true;
+  const a = achPopupQueue.shift();
+  const popup = document.getElementById("achPopup");
+  document.getElementById("achPopupIcon").textContent = a.icon;
+  document.getElementById("achPopupTitle").textContent = a.title;
+  document.getElementById("achPopupDesc").textContent = a.desc;
+  popup.classList.remove("hide");
+  popup.classList.add("show");
+  const dismiss = ()=>{
+    popup.classList.remove("show");
+    popup.classList.add("hide");
+    setTimeout(()=>{ popup.classList.remove("hide"); advanceAchPopupQueue(); }, 300);
+  };
+  clearTimeout(popup._achTimer);
+  popup._achTimer = setTimeout(dismiss, 3800);
+  document.getElementById("achPopupClose").onclick = ()=>{ clearTimeout(popup._achTimer); dismiss(); };
 }
 let achievementsExpanded = false;
 let achievementsView = null; // null | "unlocked" | "locked"
