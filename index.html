@@ -214,6 +214,11 @@
   input:focus,textarea:focus,select:focus{border-color:var(--twilight);outline:none;}
 
   .games-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
+  .hidden{display:none !important;}
+  .ach-row{display:grid;gap:12px;margin-bottom:12px;}
+  .ach-row-1{grid-template-columns:1fr;}
+  .ach-row-2{grid-template-columns:1fr 1fr;}
+  @media (max-width:560px){ .ach-row-2{grid-template-columns:1fr;} }
   @media (max-width:560px){ .games-grid{grid-template-columns:1fr;} }
   .game-tile{background:var(--white);border:2px solid var(--paper-deep);border-radius:var(--radius-m);padding:18px;box-shadow:var(--shadow-card);display:flex;flex-direction:column;gap:8px;}
   .game-tile .icon-badge{width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;background:var(--paper-deep);}
@@ -402,16 +407,26 @@
       <div class="sum-card due"><div class="icon">🔥</div><div><div class="num" id="streakVal2">0</div><div class="lbl">day streak</div></div></div>
     </div>
 
-    <div class="view-head" style="margin-top:8px;"><h2 style="font-size:19px;">Achievements</h2></div>
-    <div class="games-grid" id="achievementsGrid" style="margin-bottom:26px;"></div>
+    <div class="ach-row ach-row-1" style="margin-bottom:12px;">
+      <div class="sum-card stars" id="achievementsCard" style="cursor:pointer;">
+        <div class="icon">🏅</div><div><div class="num" id="achEarnedCount">0 of 0</div><div class="lbl">achievements — tap to view</div></div>
+      </div>
+    </div>
+    <div class="ach-row ach-row-2 hidden" id="achievementsSubRow" style="margin-bottom:12px;">
+      <div class="sum-card streak" id="achUnlockedCard" style="cursor:pointer;">
+        <div class="icon">🔓</div><div><div class="num" id="achUnlockedNum">0</div><div class="lbl">unlocked</div></div>
+      </div>
+      <div class="sum-card due" id="achLockedCard" style="cursor:pointer;">
+        <div class="icon">🔒</div><div><div class="num" id="achLockedNum">0</div><div class="lbl">locked</div></div>
+      </div>
+    </div>
+    <div class="games-grid hidden" id="achievementsGrid" style="margin-bottom:26px;"></div>
 
     <div class="view-head" style="margin-top:8px;"><h2 style="font-size:19px;">Mastered Over Time</h2></div>
     <div class="path-card" style="margin-bottom:26px;padding:18px;"><div id="progressChart"></div></div>
 
     <div class="view-head" style="margin-top:8px;"><h2 style="font-size:19px;">Review Pace</h2><p>How aggressively verses come back up for review once you've learned them.</p></div>
-    <div class="filter-row" id="paceRow" style="margin-bottom:26px;"></div>
-
-    <div class="book-list journey-list" id="journeyList"></div>
+    <div class="filter-row" id="paceRow"></div>
   </section>
 
   <section class="view" id="view-family">
@@ -1296,6 +1311,19 @@ function maybeShowReminder(){
   }
 }
 function refreshHeaderStats(){ document.getElementById("streakTop").textContent = state.streak; }
+document.getElementById("achievementsCard").addEventListener("click", ()=>{
+  achievementsExpanded = !achievementsExpanded;
+  if(!achievementsExpanded) achievementsView = null;
+  renderAchievementsGrid();
+});
+document.getElementById("achUnlockedCard").addEventListener("click", ()=>{
+  achievementsView = achievementsView==="unlocked" ? null : "unlocked";
+  renderAchievementsGrid();
+});
+document.getElementById("achLockedCard").addEventListener("click", ()=>{
+  achievementsView = achievementsView==="locked" ? null : "locked";
+  renderAchievementsGrid();
+});
 
 /* =====================================================================
    PATH VIEW
@@ -1972,20 +2000,32 @@ function checkAchievements(){
     newOnes.forEach(a=> toast("Achievement unlocked: "+a.icon+" "+a.title+"!"));
   }
 }
+let achievementsExpanded = false;
+let achievementsView = null; // null | "unlocked" | "locked"
 function renderAchievementsGrid(){
+  const earned = state.earnedAchievements || [];
+  document.getElementById("achEarnedCount").textContent = earned.length+" of "+ACHIEVEMENTS.length;
+  document.getElementById("achUnlockedNum").textContent = earned.length;
+  document.getElementById("achLockedNum").textContent = ACHIEVEMENTS.length - earned.length;
+  document.getElementById("achievementsSubRow").classList.toggle("hidden", !achievementsExpanded);
+
   const grid = document.getElementById("achievementsGrid");
-  if(!grid) return;
+  if(!achievementsExpanded || !achievementsView){
+    grid.classList.add("hidden");
+    grid.innerHTML = "";
+    return;
+  }
+  grid.classList.remove("hidden");
+  const list = ACHIEVEMENTS.filter(a=> achievementsView==="unlocked" ? earned.includes(a.id) : !earned.includes(a.id));
   grid.innerHTML = "";
-  ACHIEVEMENTS.forEach(a=>{
-    const earned = (state.earnedAchievements||[]).includes(a.id);
+  if(!list.length){
+    grid.innerHTML = `<div class="no-content">${achievementsView==="unlocked" ? "None yet — keep practicing!" : "Everything's unlocked! 🎉"}</div>`;
+    return;
+  }
+  list.forEach(a=>{
     const tile = document.createElement("div");
     tile.className = "game-tile";
-    tile.style.opacity = earned ? "1" : ".45";
-    tile.innerHTML = `
-      <div class="icon-badge">${a.icon}</div>
-      <h3>${a.title}</h3>
-      <p>${earned ? a.desc : "Locked — "+a.desc}</p>
-    `;
+    tile.innerHTML = `<div class="icon-badge">${a.icon}</div><h3>${a.title}</h3><p>${a.desc}</p>`;
     grid.appendChild(tile);
   });
 }
@@ -2052,27 +2092,6 @@ function renderJourney(){
   renderAchievementsGrid();
   renderProgressChart();
   renderPaceSettings();
-
-  const list=document.getElementById("journeyList");
-  list.innerHTML="";
-  if(!verses.length){ list.innerHTML='<div class="no-content">Add a verse to start your journey.</div>'; return; }
-  verses.slice().sort((a,b)=>{
-    const pa=ensureProgress(a), pb=ensureProgress(b);
-    return (pb.unlocked/b.chunks.length) - (pa.unlocked/a.chunks.length);
-  }).forEach(v=>{
-    const p=ensureProgress(v), total=v.chunks.length;
-    const stars = isMastered(v) ? 5 : Math.round((p.unlocked/total)*5);
-    const card=document.createElement("div");
-    card.className="book-card";
-    card.innerHTML=`
-      <div>
-        <div class="ref">${v.ref}</div>
-        <div class="flag">${isMastered(v) ? "Mastered ⭐" : readyForFinalTest(v) ? "Ready for the Final Test" : "Part "+p.unlocked+" of "+total+" learned"+(isDue(v) ? " · ready to practice" : "")}</div>
-      </div>
-      <div class="stars-row">${[1,2,3,4,5].map(n=>`<span class="star ${stars>=n?'on':''}">★</span>`).join("")}</div>
-    `;
-    list.appendChild(card);
-  });
 }
 
 /* =====================================================================
