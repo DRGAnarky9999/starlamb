@@ -4,8 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Starlamb — a verse-memory adventure</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#33415c">
+<link rel="icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700;9..144,800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700;9..144,800&family=Quicksand:wght@500;600;700&family=Lexend:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
     --paper:#f6efdc;
@@ -44,6 +47,7 @@
     min-height:100vh;
   }
   body.big-text{ font-size:118%; }
+  body.dyslexia-font, body.dyslexia-font *{ font-family:"Lexend", sans-serif !important; letter-spacing:.01em; }
   *{ scroll-behavior:smooth; }
   button{font-family:inherit;cursor:pointer;}
   h1,h2,h3{font-family:var(--font-display);}
@@ -303,6 +307,8 @@
   <div class="topbar-actions">
     <button class="streak-pill profile-chip" id="profileChipBtn" title="Switch learner" aria-label="Switch learner">🙂 Learner</button>
     <div class="streak-pill">🔥 <span id="streakTop">0</span> day streak</div>
+    <button class="icon-btn" id="fontToggleBtn" title="Easier-to-read font" aria-label="Toggle dyslexia-friendly font">Ff</button>
+    <button class="icon-btn" id="remindBtn" title="Daily reminder" aria-label="Toggle daily reminder">🔔</button>
     <button class="icon-btn" id="textSizeBtn" title="Larger text" aria-label="Toggle larger text">Aa</button>
   </div>
 </header>
@@ -311,7 +317,9 @@
   <button data-view="path" class="active"><span class="emoji">🛤️</span>Path</button>
   <button data-view="book"><span class="emoji">📖</span>Verse Book</button>
   <button data-view="games"><span class="emoji">🎲</span>Games</button>
+  <button data-view="library"><span class="emoji">🔎</span>Library</button>
   <button data-view="journey"><span class="emoji">⭐</span>My Journey</button>
+  <button data-view="family"><span class="emoji">👪</span>Family</button>
 </nav>
 
 <div class="wrap">
@@ -375,6 +383,12 @@
     <div class="games-grid" id="storyGrid"></div>
   </section>
 
+  <section class="view" id="view-library">
+    <div class="view-head"><h2>Library</h2><p>Every built-in verse, browsable by topic. Add any one straight to your path.</p></div>
+    <div class="filter-row" id="libraryTopicRow"></div>
+    <div class="book-list" id="libraryList"></div>
+  </section>
+
   <section class="view" id="view-play">
     <div class="view-head"><h2 id="playTitle">Playing</h2><p id="playSub">0 / 0 correct this round</p></div>
     <div id="playStageWrap"></div>
@@ -387,7 +401,22 @@
       <div class="sum-card streak"><div class="icon">⭐</div><div><div class="num" id="masteredVal">0</div><div class="lbl">verses mastered</div></div></div>
       <div class="sum-card due"><div class="icon">🔥</div><div><div class="num" id="streakVal2">0</div><div class="lbl">day streak</div></div></div>
     </div>
+
+    <div class="view-head" style="margin-top:8px;"><h2 style="font-size:19px;">Achievements</h2></div>
+    <div class="games-grid" id="achievementsGrid" style="margin-bottom:26px;"></div>
+
+    <div class="view-head" style="margin-top:8px;"><h2 style="font-size:19px;">Mastered Over Time</h2></div>
+    <div class="path-card" style="margin-bottom:26px;padding:18px;"><div id="progressChart"></div></div>
+
+    <div class="view-head" style="margin-top:8px;"><h2 style="font-size:19px;">Review Pace</h2><p>How aggressively verses come back up for review once you've learned them.</p></div>
+    <div class="filter-row" id="paceRow" style="margin-bottom:26px;"></div>
+
     <div class="book-list journey-list" id="journeyList"></div>
+  </section>
+
+  <section class="view" id="view-family">
+    <div class="view-head"><h2>Family</h2><p>Everyone who's logged into Starlamb on this device, side by side.</p></div>
+    <div class="book-list" id="familyList"></div>
   </section>
 
 </div>
@@ -643,7 +672,7 @@ const GAMES = [
 /* =====================================================================
    STATE + PERSISTENCE
 ===================================================================== */
-let state = { verses: [], archivedVerses: [], backlog: [], progress: {}, streak:0, lastPracticeDay:null, totalCorrect:0, totalAttempts:0 };
+let state = { verses: [], archivedVerses: [], backlog: [], progress: {}, streak:0, lastPracticeDay:null, totalCorrect:0, totalAttempts:0, earnedAchievements:[], masteryLog:[], pace:"standard", dyslexiaFont:false, remindMe:false };
 let bookFilter = "all";
 let session = null;
 let storageOk = true;
@@ -652,13 +681,16 @@ function today(){ return Math.floor(Date.now()/86400000); }
 function profileKey(id){ return "lamplight-state-v2:"+id; }
 
 async function loadState(id){
-  state = { verses: [], archivedVerses: [], backlog: [], progress: {}, streak:0, lastPracticeDay:null, totalCorrect:0, totalAttempts:0 };
+  state = { verses: [], archivedVerses: [], backlog: [], progress: {}, streak:0, lastPracticeDay:null, totalCorrect:0, totalAttempts:0, earnedAchievements:[], masteryLog:[], pace:"standard", dyslexiaFont:false, remindMe:false };
   try{
     const res = await window.storage.get(profileKey(id), false);
     if(res && res.value){
       state = Object.assign(state, JSON.parse(res.value));
       if(!state.archivedVerses) state.archivedVerses = [];
       if(!state.backlog) state.backlog = [];
+      if(!state.earnedAchievements) state.earnedAchievements = [];
+      if(!state.masteryLog) state.masteryLog = [];
+      if(!state.pace) state.pace = "standard";
     }
     else { seedDemo(); }
   }catch(e){ storageOk = false; seedDemo(); }
@@ -677,8 +709,8 @@ function saveState(){
 function freshState(){
   const verses = LIBRARY_VERSES.slice(0, BATCH_SIZE);
   const progress = {};
-  verses.forEach(v=> progress[v.id] = {unlocked:1, streak:0, mastered:false, dueDay:0, fullPracticed:false});
-  return { verses, archivedVerses:[], backlog:[], progress, streak:0, lastPracticeDay:null, totalCorrect:0, totalAttempts:0 };
+  verses.forEach(v=> progress[v.id] = {unlocked:1, streak:0, mastered:false, dueDay:0, fullPracticed:false, misses:0});
+  return { verses, archivedVerses:[], backlog:[], progress, streak:0, lastPracticeDay:null, totalCorrect:0, totalAttempts:0, earnedAchievements:[], masteryLog:[], pace:"standard", dyslexiaFont:false, remindMe:false };
 }
 function seedDemo(){
   state = Object.assign(state, freshState());
@@ -729,6 +761,46 @@ function updateProfileChip(){
   chip.textContent = currentProfile.emoji+" "+currentProfile.name;
 }
 function renderAll(){ renderPath(); renderBook(); renderGames(); renderJourney(); }
+
+async function renderFamily(){
+  const list = document.getElementById("familyList");
+  if(!profiles.length){
+    list.innerHTML = '<div class="no-content">No one has logged in on this device yet.</div>';
+    return;
+  }
+  list.innerHTML = '<div class="no-content">Loading everyone\'s progress...</div>';
+  const rows = await Promise.all(profiles.map(async p=>{
+    let s = null;
+    if(p.id===currentProfile?.id){ s = state; }
+    else if(p.accountId){ s = await loadAccountState(p.accountId); }
+    if(!s){
+      try{ const raw = await window.storage.get(profileKey(p.id), false); if(raw && raw.value) s = JSON.parse(raw.value); }catch(e){}
+    }
+    const versesArr = s ? (s.verses||[]).concat(s.archivedVerses||[]) : [];
+    const mastered = s ? versesArr.filter(v=>{
+      const pr = (s.progress||{})[v.id];
+      return pr && pr.mastered;
+    }).length : 0;
+    const acc = s && s.totalAttempts ? Math.round((s.totalCorrect/s.totalAttempts)*100) : 0;
+    const streak = s ? (s.streak||0) : 0;
+    return {p, mastered, acc, streak};
+  }));
+  list.innerHTML = "";
+  rows.forEach(({p, mastered, acc, streak})=>{
+    const card = document.createElement("div");
+    card.className = "book-card";
+    card.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div class="avatar" style="background:${p.color};width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;flex:none;">${p.emoji}</div>
+        <div>
+          <div class="ref">${p.name}${currentProfile && p.id===currentProfile.id ? " (you)" : ""}</div>
+          <div class="flag">${mastered} mastered · ${streak} day streak · ${acc}% accuracy</div>
+        </div>
+      </div>
+    `;
+    list.appendChild(card);
+  });
+}
 
 let modalScreen = "list";
 let draftSignup = {};
@@ -1056,7 +1128,7 @@ async function logOutCurrentProfile(){
   await saveProfilesList();
   currentProfile = null;
   await setActiveProfileId("");
-  state = { verses: [], archivedVerses: [], backlog: [], progress: {}, streak:0, lastPracticeDay:null, totalCorrect:0, totalAttempts:0 };
+  state = { verses: [], archivedVerses: [], backlog: [], progress: {}, streak:0, lastPracticeDay:null, totalCorrect:0, totalAttempts:0, earnedAchievements:[], masteryLog:[], pace:"standard", dyslexiaFont:false, remindMe:false };
   renderAll();
   updateProfileChip();
   toast("Logged out of "+name);
@@ -1079,10 +1151,11 @@ function activeText(v){
   return v.chunks.slice(0, p.unlocked).join(" ");
 }
 function ensureProgress(v){
-  if(!state.progress[v.id]) state.progress[v.id] = {unlocked:1, streak:0, mastered:false, dueDay:0, fullPracticed:false};
+  if(!state.progress[v.id]) state.progress[v.id] = {unlocked:1, streak:0, mastered:false, dueDay:0, fullPracticed:false, misses:0};
   const p = state.progress[v.id];
   if(p.unlocked > v.chunks.length) p.unlocked = v.chunks.length;
   if(p.fullPracticed === undefined) p.fullPracticed = false;
+  if(p.misses === undefined) p.misses = 0;
   return p;
 }
 function isDue(v){ return ensureProgress(v).dueDay <= today(); }
@@ -1092,6 +1165,11 @@ function readyForFinalTest(v){
   return !p.mastered && p.unlocked >= v.chunks.length && p.fullPracticed;
 }
 
+function paceMultiplier(){
+  if(state.pace==="relaxed") return 1.5;
+  if(state.pace==="intense") return 0.5;
+  return 1;
+}
 function recordResult(v, correct, opts){
   opts = opts || {};
   const p = ensureProgress(v);
@@ -1105,14 +1183,22 @@ function recordResult(v, correct, opts){
     } else if(p.unlocked >= total && !p.fullPracticed){
       p.fullPracticed = true; readyFinal = true;
     }
+  } else {
+    p.misses = (p.misses||0) + 1;
   }
-  p.dueDay = correct ? today() + (p.mastered ? 14 : p.unlocked) : today();
+  const baseInterval = p.mastered ? 14 : p.unlocked;
+  p.dueDay = correct ? today() + Math.max(1, Math.round(baseInterval * paceMultiplier())) : today();
   state.totalAttempts++; if(correct) state.totalCorrect++;
+  if(justMastered){
+    if(!state.masteryLog) state.masteryLog = [];
+    state.masteryLog.push({day: today()});
+  }
   if(state.lastPracticeDay !== today()){
     state.streak = state.lastPracticeDay === today()-1 ? state.streak+1 : 1;
     state.lastPracticeDay = today();
   }
   saveState();
+  checkAchievements();
   return {grew, justMastered, readyFinal};
 }
 
@@ -1168,7 +1254,9 @@ function showView(name){
   if(name==="path") renderPath();
   if(name==="book") renderBook();
   if(name==="games") renderGames();
+  if(name==="library") renderLibrary();
   if(name==="journey") renderJourney();
+  if(name==="family") renderFamily();
   window.scrollTo({top:0,behavior:"smooth"});
 }
 document.getElementById("tabList").addEventListener("click", e=>{
@@ -1179,6 +1267,34 @@ document.getElementById("textSizeBtn").addEventListener("click", ()=>{
   document.body.classList.toggle("big-text");
   document.getElementById("textSizeBtn").classList.toggle("active");
 });
+document.getElementById("fontToggleBtn").addEventListener("click", ()=>{
+  document.body.classList.toggle("dyslexia-font");
+  document.getElementById("fontToggleBtn").classList.toggle("active");
+  state.dyslexiaFont = document.body.classList.contains("dyslexia-font");
+  saveState();
+});
+document.getElementById("remindBtn").addEventListener("click", async ()=>{
+  if(!("Notification" in window)){ toast("Notifications aren't supported in this browser."); return; }
+  if(!state.remindMe){
+    const perm = await Notification.requestPermission();
+    if(perm !== "granted"){ toast("Notifications weren't allowed — check your browser settings."); return; }
+    state.remindMe = true;
+    toast("Reminders on — we'll nudge you if it's been a while, while the tab is open.");
+  } else {
+    state.remindMe = false;
+    toast("Reminders off.");
+  }
+  saveState();
+  document.getElementById("remindBtn").classList.toggle("active", state.remindMe);
+});
+function maybeShowReminder(){
+  if(!state.remindMe) return;
+  if(!("Notification" in window) || Notification.permission!=="granted") return;
+  const daysSince = state.lastPracticeDay===null ? 999 : today()-state.lastPracticeDay;
+  if(daysSince>=1){
+    try{ new Notification("Starlamb", {body:"It's been a bit — come keep your streak going! 🔥"}); }catch(e){}
+  }
+}
 function refreshHeaderStats(){ document.getElementById("streakTop").textContent = state.streak; }
 
 /* =====================================================================
@@ -1346,6 +1462,14 @@ function renderGames(){
       <button class="btn ghost small" data-play-game="${g.id}" style="align-self:flex-start;margin-top:4px;">Play →</button>`;
     grid.appendChild(tile);
   });
+  const troubleCount = allVerses().filter(v=> (ensureProgress(v).misses||0)>0).length;
+  const troubleTile=document.createElement("div");
+  troubleTile.className="game-tile";
+  troubleTile.innerHTML=`<div class="icon-badge">🎯</div><h3>Trouble Spots</h3><p>${troubleCount ? "Revisit the "+Math.min(troubleCount,8)+" verse(s) you've missed most, across every game." : "Nothing missed yet — this fills in as you play."}</p>
+    <button class="btn ghost small" id="playTroubleBtn" style="align-self:flex-start;margin-top:4px;">Play →</button>`;
+  grid.appendChild(troubleTile);
+  document.getElementById("playTroubleBtn").onclick = ()=>{ startSession("reference", {troubleMode:true}); showView("play"); };
+
   grid.querySelectorAll("[data-play-game]").forEach(b=>{
     b.onclick=()=>{ startSession(b.dataset.playGame); showView("play"); };
   });
@@ -1364,26 +1488,89 @@ function renderGames(){
   });
 }
 
+let libraryTopic = "All";
+function renderLibrary(){
+  const topicRow = document.getElementById("libraryTopicRow");
+  const tags = ["All", ...new Set(LIBRARY_VERSES.map(v=>v.tag).filter(Boolean))];
+  topicRow.innerHTML = tags.map(t=>`<button class="pill-filter ${libraryTopic===t?'active':''}" data-topic="${t}">${t}</button>`).join("");
+  topicRow.querySelectorAll("[data-topic]").forEach(btn=>{
+    btn.onclick = ()=>{ libraryTopic = btn.dataset.topic; renderLibrary(); };
+  });
+
+  const owned = new Set(allVerses().map(v=>v.id).concat(state.backlog.map(v=>v.id)));
+  let list = LIBRARY_VERSES.slice();
+  if(libraryTopic !== "All") list = list.filter(v=>v.tag===libraryTopic);
+
+  const el = document.getElementById("libraryList");
+  el.innerHTML = "";
+  if(!list.length){ el.innerHTML = '<div class="no-content">No verses in this topic.</div>'; return; }
+  list.forEach(v=>{
+    const has = owned.has(v.id);
+    const card = document.createElement("div");
+    card.className = "book-card";
+    card.innerHTML = `
+      <div class="book-card-top">
+        <div>
+          <div class="ref">${v.ref}</div>
+          <div class="flag">${v.testament==="OT"?"Old Testament":"New Testament"}${v.tag?" · "+v.tag:""}</div>
+        </div>
+      </div>
+      <div class="verse-text">${fullText(v)}</div>
+      <div class="book-card-actions">
+        ${has ? '<span class="chunk-progress" style="margin:0;">Already in your library</span>' : `<button class="btn ghost small" data-add="${v.id}">➕ Add to Path</button>`}
+      </div>
+    `;
+    el.appendChild(card);
+  });
+  el.querySelectorAll("[data-add]").forEach(btn=>{
+    btn.onclick = ()=>{
+      const v = LIBRARY_VERSES.find(x=>x.id===btn.dataset.add);
+      if(!v) return;
+      if(!state.progress[v.id]) state.progress[v.id] = {unlocked:1, streak:0, mastered:false, dueDay:0, fullPracticed:false, misses:0};
+      if(state.verses.length < BATCH_SIZE){
+        state.verses.push(v);
+        saveState();
+        toast(v.ref+" added to your Path 🛤️");
+      } else {
+        state.backlog.push(v);
+        saveState();
+        toast(v.ref+" added — waiting for your next set 📚");
+      }
+      renderLibrary();
+    };
+  });
+}
+
 /* =====================================================================
    PLAY ENGINE
 ===================================================================== */
 const GAME_TITLES = {flashcard:"Memory Flip", fillblank:"Word Gaps", wordorder:"Puzzle Builder", reference:"Which Verse?"};
 let finalTestState = {}; // verse id -> true once the learner has opted into the Final Test for that verse
 
-function startSession(gameId){
+function startSession(gameId, opts){
+  opts = opts || {};
   let pool = allVerses();
   if(!pool.length){ session=null; renderPlayEmpty(); return; }
-  const due = pool.filter(isDue);
-  pool = shuffle(due.length ? due : pool).slice(0,8);
+  if(opts.troubleMode){
+    pool = pool.filter(v=> (ensureProgress(v).misses||0) > 0)
+      .sort((a,b)=> (ensureProgress(b).misses||0) - (ensureProgress(a).misses||0))
+      .slice(0,8);
+    if(!pool.length){ session=null; renderPlayEmpty(true); return; }
+  } else {
+    const due = pool.filter(isDue);
+    pool = shuffle(due.length ? due : pool).slice(0,8);
+  }
   session = {module:gameId, queue:pool, index:0, correct:0, attempts:0};
   finalTestState = {};
-  document.getElementById("playTitle").textContent = GAME_TITLES[gameId];
+  document.getElementById("playTitle").textContent = opts.troubleMode ? "Trouble Spots" : GAME_TITLES[gameId];
+  trackGamePlayed(gameId);
   renderPlayStep();
 }
 function startSingleVersePlay(v){
   session = {module:"flashcard", queue:[v], index:0, correct:0, attempts:0};
   finalTestState = {};
   document.getElementById("playTitle").textContent = "Memory Flip — "+v.ref;
+  trackGamePlayed("flashcard");
   renderPlayStep();
 }
 function startStorySession(storyId){
@@ -1396,10 +1583,12 @@ function updatePlaySub(){
   const c=session?session.correct:0, a=session?session.attempts:0;
   document.getElementById("playSub").textContent = c+" / "+a+" correct this round";
 }
-function renderPlayEmpty(){
+function renderPlayEmpty(trouble){
   document.getElementById("playTitle").textContent = "Nothing to play yet";
   document.getElementById("playSub").textContent = "";
-  document.getElementById("playStageWrap").innerHTML = '<div class="no-content">Add a verse in <b>Verse Book</b> first, then come back and play.</div>';
+  document.getElementById("playStageWrap").innerHTML = trouble
+    ? '<div class="no-content">No trouble spots right now — nothing you\'ve missed lately. <b>Nice work!</b></div>'
+    : '<div class="no-content">Add a verse in <b>Verse Book</b> first, then come back and play.</div>';
 }
 function stageShell(inner, controls){ return `<div class="stage">${inner}<div class="stage-controls">${controls||""}</div></div>`; }
 
@@ -1436,8 +1625,14 @@ function recordPracticeOnly(v, correct){
   // Used by Word Gaps, Puzzle Builder, and Which Verse? — these are just for
   // fun/practice and never touch a verse's unlocked parts, mastery, or
   // review schedule. Only Memory Flip's part-by-part system + Final Test
-  // actually advances Path progress.
+  // actually advances Path progress. We do still log misses so Trouble
+  // Spots can surface verses that keep tripping someone up.
   session.attempts++; if(correct) session.correct++;
+  if(!correct){
+    const p = ensureProgress(v);
+    p.misses = (p.misses||0) + 1;
+    saveState();
+  }
   updatePlaySub();
 }
 function renderNextButton(v){
@@ -1745,6 +1940,105 @@ function renderStoryStep(){
 }
 
 /* =====================================================================
+   ACHIEVEMENTS
+===================================================================== */
+const ACHIEVEMENTS = [
+  {id:"first_verse", icon:"⭐", title:"First Verse Mastered", desc:"Master your very first verse.", check:()=> allVerses().filter(isMastered).length>=1},
+  {id:"five_mastered", icon:"🌟", title:"Five Mastered", desc:"Master 5 verses.", check:()=> allVerses().filter(isMastered).length>=5},
+  {id:"ten_mastered", icon:"🏆", title:"Ten Mastered", desc:"Master 10 verses.", check:()=> allVerses().filter(isMastered).length>=10},
+  {id:"ot_explorer", icon:"📜", title:"Old Testament Explorer", desc:"Master 3 Old Testament verses.", check:()=> allVerses().filter(v=>v.testament==="OT" && isMastered(v)).length>=3},
+  {id:"nt_explorer", icon:"📖", title:"New Testament Explorer", desc:"Master 3 New Testament verses.", check:()=> allVerses().filter(v=>v.testament==="NT" && isMastered(v)).length>=3},
+  {id:"streak_3", icon:"🔥", title:"3-Day Streak", desc:"Practice 3 days in a row.", check:()=> state.streak>=3},
+  {id:"streak_7", icon:"🔥", title:"7-Day Streak", desc:"Practice 7 days in a row.", check:()=> state.streak>=7},
+  {id:"streak_30", icon:"🔥", title:"30-Day Streak", desc:"Practice 30 days in a row.", check:()=> state.streak>=30},
+  {id:"well_rounded", icon:"🎲", title:"Well Rounded", desc:"Try every practice game at least once.", check:()=> state.gamesPlayed && state.gamesPlayed.length>=4}
+];
+function trackGamePlayed(moduleId){
+  if(!state.gamesPlayed) state.gamesPlayed = [];
+  if(!state.gamesPlayed.includes(moduleId)){ state.gamesPlayed.push(moduleId); saveState(); }
+  checkAchievements();
+}
+function checkAchievements(){
+  if(!state.earnedAchievements) state.earnedAchievements = [];
+  const newOnes = [];
+  ACHIEVEMENTS.forEach(a=>{
+    if(!state.earnedAchievements.includes(a.id) && a.check()){
+      state.earnedAchievements.push(a.id);
+      newOnes.push(a);
+    }
+  });
+  if(newOnes.length){
+    saveState();
+    newOnes.forEach(a=> toast("Achievement unlocked: "+a.icon+" "+a.title+"!"));
+  }
+}
+function renderAchievementsGrid(){
+  const grid = document.getElementById("achievementsGrid");
+  if(!grid) return;
+  grid.innerHTML = "";
+  ACHIEVEMENTS.forEach(a=>{
+    const earned = (state.earnedAchievements||[]).includes(a.id);
+    const tile = document.createElement("div");
+    tile.className = "game-tile";
+    tile.style.opacity = earned ? "1" : ".45";
+    tile.innerHTML = `
+      <div class="icon-badge">${a.icon}</div>
+      <h3>${a.title}</h3>
+      <p>${earned ? a.desc : "Locked — "+a.desc}</p>
+    `;
+    grid.appendChild(tile);
+  });
+}
+function renderProgressChart(){
+  const el = document.getElementById("progressChart");
+  if(!el) return;
+  const log = state.masteryLog || [];
+  const weeks = 8;
+  const now = today();
+  const buckets = new Array(weeks).fill(0);
+  log.forEach(entry=>{
+    const weeksAgo = Math.floor((now - entry.day)/7);
+    if(weeksAgo>=0 && weeksAgo<weeks) buckets[weeks-1-weeksAgo]++;
+  });
+  const max = Math.max(1, ...buckets);
+  const barW = 28, gap = 12, chartH = 110;
+  const svgW = weeks*(barW+gap);
+  const bars = buckets.map((c,i)=>{
+    const h = Math.round((c/max)*chartH);
+    const x = i*(barW+gap);
+    const y = chartH - h;
+    return `<rect x="${x}" y="${y}" width="${barW}" height="${Math.max(h,2)}" rx="4" fill="${c>0?'var(--lantern)':'var(--paper-deep)'}"></rect>
+            <text x="${x+barW/2}" y="${chartH+16}" font-size="10" text-anchor="middle" fill="var(--ink-soft)">${c}</text>`;
+  }).join("");
+  if(!log.length){
+    el.innerHTML = '<div class="no-content" style="padding:20px;">Master a verse and this fills in — one bar per week, most recent on the right.</div>';
+    return;
+  }
+  el.innerHTML = `<svg viewBox="0 0 ${svgW} ${chartH+26}" style="width:100%;max-width:${svgW}px;height:auto;">${bars}</svg>
+    <p style="font-size:11.5px;color:var(--ink-soft);font-weight:700;margin:6px 0 0;">Verses mastered per week, last ${weeks} weeks</p>`;
+}
+const PACE_OPTIONS = [
+  {id:"relaxed", label:"Relaxed"},
+  {id:"standard", label:"Standard"},
+  {id:"intense", label:"Intense"}
+];
+function renderPaceSettings(){
+  const row = document.getElementById("paceRow");
+  if(!row) return;
+  row.innerHTML = PACE_OPTIONS.map(p=>
+    `<button class="pill-filter ${state.pace===p.id?'active':''}" data-pace="${p.id}">${p.label}</button>`
+  ).join("");
+  row.querySelectorAll("[data-pace]").forEach(btn=>{
+    btn.onclick = ()=>{
+      state.pace = btn.dataset.pace;
+      saveState();
+      renderPaceSettings();
+      toast("Review pace set to "+btn.textContent);
+    };
+  });
+}
+
+/* =====================================================================
    JOURNEY
 ===================================================================== */
 function renderJourney(){
@@ -1754,6 +2048,10 @@ function renderJourney(){
   document.getElementById("accVal").textContent=acc+"%";
   document.getElementById("masteredVal").textContent=mastered;
   document.getElementById("streakVal2").textContent=state.streak;
+
+  renderAchievementsGrid();
+  renderProgressChart();
+  renderPaceSettings();
 
   const list=document.getElementById("journeyList");
   list.innerHTML="";
@@ -1797,10 +2095,19 @@ async function init(){
     if(cloudData){ state = cloudData; loadedFromCloud = true; }
   }
   if(!loadedFromCloud) await loadState(currentProfile.id);
+  if(state.dyslexiaFont){ document.body.classList.add("dyslexia-font"); document.getElementById("fontToggleBtn").classList.add("active"); }
+  if(state.remindMe){ document.getElementById("remindBtn").classList.add("active"); }
   renderAll();
   updateProfileChip();
+  maybeShowReminder();
 }
 init();
+
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=>{
+    navigator.serviceWorker.register("sw.js").catch(()=>{ /* fine if this fails, e.g. opened as a local file */ });
+  });
+}
 
 /* =====================================================================
    UPDATE CHECK — only works once this file is hosted somewhere real
