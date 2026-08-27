@@ -2025,7 +2025,12 @@ function renderAchievementsGrid(){
   list.forEach(a=>{
     const tile = document.createElement("div");
     tile.className = "game-tile";
-    tile.innerHTML = `<div class="icon-badge">${a.icon}</div><h3>${a.title}</h3><p>${a.desc}</p>`;
+    if(achievementsView==="locked"){
+      tile.style.opacity = ".45";
+      tile.innerHTML = `<div class="icon-badge">${a.icon}</div><h3>${a.title}</h3><p>Locked — ${a.desc}</p>`;
+    } else {
+      tile.innerHTML = `<div class="icon-badge">${a.icon}</div><h3>${a.title}</h3><p>${a.desc}</p>`;
+    }
     grid.appendChild(tile);
   });
 }
