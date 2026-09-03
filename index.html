@@ -412,9 +412,22 @@
   </section>
 
   <section class="view" id="view-library">
-    <div class="view-head"><h2>Library</h2><p>Every built-in verse, browsable by topic. Add any one straight to your path.</p></div>
+    <div class="view-head"><h2>Library</h2><p id="libraryIntro">Every built-in verse, browsable by topic. Add any one straight to your path.</p></div>
     <div class="filter-row" id="libraryTopicRow"></div>
     <div class="book-list" id="libraryList"></div>
+
+    <div class="view-head" style="margin-top:30px;"><h2 style="font-size:19px;">Import Your Own Bible</h2>
+      <p>Load a plain .txt file, one verse per line, formatted like: <code>Genesis 1:1 In the beginning...</code> Or host that file in your GitHub repo and point <code>BIBLE_SOURCE_URL</code> (near the bottom of the script) at its raw URL — every device will then pull it automatically.</p>
+    </div>
+    <form class="add-verse" id="importBibleForm" style="display:block;">
+      <input type="file" id="importBibleFile" accept=".txt" style="margin-bottom:10px;">
+      <p id="importBibleStatus" class="hint" style="margin:0 0 12px;"></p>
+      <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+        <button type="button" class="btn ghost small" id="resetLibraryBtn">Reset to Built-in Verses</button>
+        <button type="button" class="btn ghost small" id="refreshFromGithubBtn">Refresh from GitHub</button>
+        <button type="submit" class="btn lantern small">Import File</button>
+      </div>
+    </form>
   </section>
 
   <section class="view" id="view-play">
@@ -635,7 +648,7 @@ async function loadAccountState(accountId){
    This is the full built-in pool; the Path only ever shows 10 at a
    time — "Get New Verses" pulls the next 10 in from here.
 ===================================================================== */
-const LIBRARY_VERSES = [
+let LIBRARY_VERSES = [
   {id:"gen1-1", ref:"Genesis 1:1", testament:"OT", tag:"Creation",
     chunks:["In the beginning God created", "the heaven and the earth."]},
   {id:"psa23-1", ref:"Psalm 23:1", testament:"OT", tag:"Trust",
@@ -699,7 +712,95 @@ const LIBRARY_VERSES = [
   {id:"1jn4-19", ref:"1 John 4:19", testament:"NT", tag:"Love",
     chunks:["We love him,", "because he first loved us."]}
 ];
+const DEFAULT_LIBRARY_VERSES = LIBRARY_VERSES.slice();
 const BATCH_SIZE = 10;
+
+/* =====================================================================
+   BIBLE IMPORT — lets someone load their own translation as a plain
+   .txt file, one verse per line, in the form:
+     Genesis 1:1 In the beginning God created the heaven and the earth.
+   This never ships with any translation text itself; it only parses
+   whatever file the person supplies, entirely in their own browser.
+===================================================================== */
+const OT_BOOKS = ["Genesis","Exodus","Leviticus","Numbers","Deuteronomy","Joshua","Judges","Ruth",
+  "1 Samuel","2 Samuel","1 Kings","2 Kings","1 Chronicles","2 Chronicles","Ezra","Nehemiah","Esther",
+  "Job","Psalm","Psalms","Proverbs","Ecclesiastes","Song of Solomon","Song of Songs","Isaiah","Jeremiah",
+  "Lamentations","Ezekiel","Daniel","Hosea","Joel","Amos","Obadiah","Jonah","Micah","Nahum","Habakkuk",
+  "Zephaniah","Haggai","Zechariah","Malachi"];
+const NT_BOOKS = ["Matthew","Mark","Luke","John","Acts","Romans","1 Corinthians","2 Corinthians",
+  "Galatians","Ephesians","Philippians","Colossians","1 Thessalonians","2 Thessalonians","1 Timothy",
+  "2 Timothy","Titus","Philemon","Hebrews","James","1 Peter","2 Peter","1 John","2 John","3 John",
+  "Jude","Revelation"];
+const OT_BOOK_SET = new Set(OT_BOOKS.map(b=>b.toLowerCase()));
+const NT_BOOK_SET = new Set(NT_BOOKS.map(b=>b.toLowerCase()));
+
+function parseBibleText(raw){
+  const lines = raw.split(/\r?\n/);
+  const lineRe = /^((?:[1-3]\s)?[A-Za-z. ]+?)\s+(\d+):(\d+)\s+(.+)$/;
+  const verses = [];
+  let skipped = 0;
+  lines.forEach(line=>{
+    const trimmed = line.trim();
+    if(!trimmed) return;
+    const m = trimmed.match(lineRe);
+    if(!m){ skipped++; return; }
+    const book = m[1].trim();
+    const chapter = m[2];
+    const verseNum = m[3];
+    const text = m[4].trim();
+    const bookLower = book.toLowerCase();
+    let testament = null;
+    if(OT_BOOK_SET.has(bookLower)) testament = "OT";
+    else if(NT_BOOK_SET.has(bookLower)) testament = "NT";
+    if(!testament || !text){ skipped++; return; }
+    const id = (book.toLowerCase().replace(/[^a-z0-9]+/g,"")) + "-" + chapter + "-" + verseNum;
+    verses.push({id, ref: book+" "+chapter+":"+verseNum, testament, tag: book, chunks: autoChunk(text)});
+  });
+  return {verses, skipped};
+}
+
+const IMPORTED_LIBRARY_KEY = "starlamb-imported-library";
+
+// Set this to a raw file URL (e.g. from GitHub: click the file, then "Raw",
+// and copy that address — it looks like
+// https://raw.githubusercontent.com/USER/REPO/main/yourfile.txt) to have
+// every device automatically pull the same Bible file instead of needing
+// a manual upload each time. Leave it blank to disable auto-loading.
+const BIBLE_SOURCE_URL = "";
+
+async function loadImportedLibrary(){
+  try{
+    const res = await window.storage.get(IMPORTED_LIBRARY_KEY, false);
+    if(res && res.value){
+      const parsed = JSON.parse(res.value);
+      if(parsed && parsed.verses && parsed.verses.length){ LIBRARY_VERSES = parsed.verses; return; }
+    }
+  }catch(e){}
+  // No local cache yet on this device — try pulling from the configured source.
+  if(BIBLE_SOURCE_URL){ await fetchBibleFromSource(true); }
+}
+async function fetchBibleFromSource(silent){
+  if(!BIBLE_SOURCE_URL) return {ok:false, reason:"no-url"};
+  try{
+    const res = await fetch(BIBLE_SOURCE_URL, {cache:"no-store"});
+    if(!res.ok) return {ok:false, reason:"http-"+res.status};
+    const text = await res.text();
+    const {verses, skipped} = parseBibleText(text);
+    if(!verses.length) return {ok:false, reason:"empty"};
+    LIBRARY_VERSES = verses;
+    await saveImportedLibrary(verses);
+    if(!silent) toast("Loaded "+verses.length+" verses from GitHub 📖");
+    return {ok:true, count:verses.length, skipped};
+  }catch(e){
+    return {ok:false, reason:"network"};
+  }
+}
+async function saveImportedLibrary(verses){
+  try{ await window.storage.set(IMPORTED_LIBRARY_KEY, JSON.stringify({verses}), false); }catch(e){}
+}
+async function clearImportedLibrary(){
+  try{ await window.storage.delete(IMPORTED_LIBRARY_KEY, false); }catch(e){}
+}
 
 const DEMO_STORIES = [
   {id:"creation-week", title:"The Creation Week", ref:"Genesis 1", icon:"🌎",
@@ -1408,7 +1509,7 @@ function renderPath(){
 
   const newRow = document.getElementById("newVersesRow");
   const usedIds = new Set(allVerses().map(x=>x.id).concat(state.backlog.map(x=>x.id)));
-  const remainingLibrary = LIBRARY_VERSES.filter(x=>!usedIds.has(x.id));
+  const remainingLibrary = shuffle(LIBRARY_VERSES.filter(x=>!usedIds.has(x.id)));
   const nextPool = state.backlog.concat(remainingLibrary);
   const allMastered = verses.length>0 && verses.every(isMastered);
   if(nextPool.length===0){
@@ -1547,23 +1648,36 @@ function renderGames(){
   });
 }
 
-let libraryTopic = "All";
+let libraryTopic = null;
 function renderLibrary(){
+  const isLarge = LIBRARY_VERSES.length > 200;
+  if(libraryTopic === null) libraryTopic = isLarge ? null : "All";
+  const intro = document.getElementById("libraryIntro");
+  intro.textContent = isLarge
+    ? "Your imported Bible ("+LIBRARY_VERSES.length+" verses). Pick a book below to browse it."
+    : "Every built-in verse, browsable by topic. Add any one straight to your path.";
+
   const topicRow = document.getElementById("libraryTopicRow");
-  const tags = ["All", ...new Set(LIBRARY_VERSES.map(v=>v.tag).filter(Boolean))];
+  const tags = (isLarge ? [] : ["All"]).concat([...new Set(LIBRARY_VERSES.map(v=>v.tag).filter(Boolean))]);
   topicRow.innerHTML = tags.map(t=>`<button class="pill-filter ${libraryTopic===t?'active':''}" data-topic="${t}">${t}</button>`).join("");
   topicRow.querySelectorAll("[data-topic]").forEach(btn=>{
     btn.onclick = ()=>{ libraryTopic = btn.dataset.topic; renderLibrary(); };
   });
 
   const owned = new Set(allVerses().map(v=>v.id).concat(state.backlog.map(v=>v.id)));
-  let list = LIBRARY_VERSES.slice();
-  if(libraryTopic !== "All") list = list.filter(v=>v.tag===libraryTopic);
-
   const el = document.getElementById("libraryList");
+
+  if(!libraryTopic){
+    el.innerHTML = '<div class="no-content">Pick a book above to browse its verses.</div>';
+    return;
+  }
+  let list = LIBRARY_VERSES;
+  if(libraryTopic !== "All") list = list.filter(v=>v.tag===libraryTopic);
+  const capped = list.length > 300 ? list.slice(0,300) : list;
+
   el.innerHTML = "";
-  if(!list.length){ el.innerHTML = '<div class="no-content">No verses in this topic.</div>'; return; }
-  list.forEach(v=>{
+  if(!capped.length){ el.innerHTML = '<div class="no-content">No verses in this topic.</div>'; return; }
+  capped.forEach(v=>{
     const has = owned.has(v.id);
     const card = document.createElement("div");
     card.className = "book-card";
@@ -1581,6 +1695,12 @@ function renderLibrary(){
     `;
     el.appendChild(card);
   });
+  if(list.length > capped.length){
+    const note = document.createElement("div");
+    note.className = "no-content";
+    note.textContent = "Showing the first 300 of "+list.length+" verses in this book.";
+    el.appendChild(note);
+  }
   el.querySelectorAll("[data-add]").forEach(btn=>{
     btn.onclick = ()=>{
       const v = LIBRARY_VERSES.find(x=>x.id===btn.dataset.add);
@@ -1599,6 +1719,56 @@ function renderLibrary(){
     };
   });
 }
+document.getElementById("importBibleForm").addEventListener("submit", (e)=>{
+  e.preventDefault();
+  const fileInput = document.getElementById("importBibleFile");
+  const statusEl = document.getElementById("importBibleStatus");
+  const file = fileInput.files[0];
+  if(!file){ statusEl.textContent = "Choose a .txt file first."; return; }
+  statusEl.textContent = "Reading file...";
+  const reader = new FileReader();
+  reader.onload = async ()=>{
+    statusEl.textContent = "Parsing...";
+    const {verses, skipped} = parseBibleText(reader.result);
+    if(!verses.length){
+      statusEl.textContent = "Couldn't find any verses in that file — check it matches the format above.";
+      return;
+    }
+    LIBRARY_VERSES = verses;
+    await saveImportedLibrary(verses);
+    libraryTopic = null;
+    statusEl.textContent = "Imported "+verses.length+" verses"+(skipped ? " ("+skipped+" lines skipped)" : "")+".";
+    toast("Bible imported — "+verses.length+" verses ready! 📖");
+    renderLibrary();
+  };
+  reader.onerror = ()=>{ statusEl.textContent = "Couldn't read that file — try again."; };
+  reader.readAsText(file);
+});
+document.getElementById("resetLibraryBtn").addEventListener("click", async ()=>{
+  LIBRARY_VERSES = DEFAULT_LIBRARY_VERSES.slice();
+  await clearImportedLibrary();
+  libraryTopic = "All";
+  document.getElementById("importBibleStatus").textContent = "";
+  document.getElementById("importBibleFile").value = "";
+  toast("Back to the built-in 30 verses.");
+  renderLibrary();
+});
+document.getElementById("refreshFromGithubBtn").addEventListener("click", async ()=>{
+  const statusEl = document.getElementById("importBibleStatus");
+  if(!BIBLE_SOURCE_URL){
+    statusEl.textContent = "No source URL is set yet — edit BIBLE_SOURCE_URL near the bottom of the script first.";
+    return;
+  }
+  statusEl.textContent = "Fetching from GitHub...";
+  const result = await fetchBibleFromSource(false);
+  if(!result.ok){
+    statusEl.textContent = "Couldn't load it (reason: "+result.reason+"). Double-check the URL is a raw file link.";
+    return;
+  }
+  libraryTopic = null;
+  statusEl.textContent = "Loaded "+result.count+" verses from GitHub"+(result.skipped ? " ("+result.skipped+" lines skipped)" : "")+".";
+  renderLibrary();
+});
 
 /* =====================================================================
    PLAY ENGINE
@@ -2159,6 +2329,7 @@ function renderJourney(){
    INIT
 ===================================================================== */
 async function init(){
+  await loadImportedLibrary();
   await loadProfilesList();
   const activeId = await getActiveProfileId();
   let match = profiles.find(p=>p.id===activeId);
