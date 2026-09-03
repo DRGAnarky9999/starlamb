@@ -54,7 +54,7 @@
   ::selection{background:var(--lantern-glow);}
   :focus-visible{outline:3px solid var(--twilight); outline-offset:2px; border-radius:6px;}
 
-  .wrap{max-width:960px;margin:0 auto;padding:0 20px 70px;}
+  .wrap{max-width:960px;margin:0 auto;padding:0 20px 24px;}
   @media (max-width:560px){ .wrap{padding:0 12px 70px;} }
 
   header.topbar{
@@ -84,16 +84,24 @@
   }
   .icon-btn.active{background:var(--twilight); color:var(--white); border-color:var(--twilight);}
 
-  nav.tabs{max-width:960px;margin:6px auto 22px;padding:0 20px;display:flex;gap:8px;overflow-x:auto;}
-  @media (max-width:560px){ nav.tabs{padding:0 12px;} }
-  nav.tabs button{
-    all:unset; display:flex; align-items:center; gap:7px;
-    padding:10px 16px; border-radius:30px; background:transparent; color:var(--ink-soft);
-    font-weight:700; font-size:14px; white-space:nowrap; border:2px solid transparent;
+  nav.tabs{
+    position:fixed; left:0; right:0; bottom:0; z-index:120;
+    background:var(--white); border-top:2px solid var(--paper-deep);
+    display:flex; justify-content:center; gap:4px; overflow-x:auto;
+    padding:6px 8px calc(6px + env(safe-area-inset-bottom));
+    box-shadow:0 -6px 20px rgba(43,36,25,.08);
   }
-  nav.tabs button .emoji{font-size:16px;}
+  nav.tabs button{
+    all:unset; display:flex; flex-direction:column; align-items:center; gap:2px;
+    padding:7px 10px; border-radius:14px; background:transparent; color:var(--ink-soft);
+    font-weight:700; font-size:10.5px; white-space:nowrap; flex:1; min-width:56px; max-width:84px;
+    text-align:center; cursor:pointer;
+  }
+  nav.tabs button .emoji{font-size:20px;}
   nav.tabs button:hover{background:var(--paper-deep);}
-  nav.tabs button.active{background:var(--white); color:var(--twilight-deep); border-color:var(--paper-deep); box-shadow:var(--shadow-card);}
+  nav.tabs button.active{background:var(--paper-deep); color:var(--twilight-deep);}
+  nav.tabs button.hidden{display:none;}
+  body{ padding-bottom:76px; }
 
   .view{display:none;}
   .view.active{display:block;}
@@ -270,7 +278,7 @@
   .story-slot .idx{color:var(--lantern-glow);min-width:18px;font-weight:800;}
   .story-pool{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:560px;}
 
-  .toast{position:fixed;bottom:20px;left:50%;transform:translate(-50%,10px);background:var(--twilight-deep);color:var(--white);padding:12px 20px;font-weight:700;font-size:13.5px;border-radius:30px;box-shadow:0 8px 24px rgba(0,0,0,.25);opacity:0;transition:all .25s ease;pointer-events:none;z-index:50;}
+  .toast{position:fixed;bottom:86px;left:50%;transform:translate(-50%,10px);background:var(--twilight-deep);color:var(--white);padding:12px 20px;font-weight:700;font-size:13.5px;border-radius:30px;box-shadow:0 8px 24px rgba(0,0,0,.25);opacity:0;transition:all .25s ease;pointer-events:none;z-index:50;}
 
   .ach-popup{
     position:fixed; top:80px; left:50%; z-index:300;
@@ -299,8 +307,17 @@
   .modal-overlay{position:fixed;inset:0;background:rgba(33,44,64,.6);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;}
   .modal-overlay.hidden{display:none;}
   .modal-card{background:var(--white);border-radius:var(--radius-l);padding:26px;max-width:420px;width:100%;box-shadow:0 24px 70px rgba(0,0,0,.35);max-height:86vh;overflow-y:auto;}
+  .settings-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 0;border-bottom:1px solid var(--paper-deep);}
+  .settings-label{font-size:14px;font-weight:700;color:var(--ink);}
+  .settings-sub{font-size:11.5px;font-weight:600;color:var(--ink-soft);margin-top:2px;max-width:230px;}
+  .switch{all:unset;width:44px;height:26px;border-radius:20px;background:var(--paper-deep);position:relative;flex:none;cursor:pointer;transition:background .2s ease;}
+  .switch .knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--white);box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .2s ease;}
+  .switch.on{background:var(--moss);}
+  .switch.on .knob{left:21px;}
+  .wt-dot{width:7px;height:7px;border-radius:50%;background:var(--paper-deep);}
+  .wt-dot.active{background:var(--lantern);}
   .update-banner{
-    position:fixed; bottom:20px; right:20px; z-index:150;
+    position:fixed; bottom:86px; right:20px; z-index:150;
     background:var(--white); border:2px solid var(--paper-deep); border-radius:var(--radius-m);
     box-shadow:var(--shadow-card); padding:12px 14px; display:flex; align-items:center; gap:10px;
     max-width:calc(100vw - 40px);
@@ -335,9 +352,7 @@
   <div class="topbar-actions">
     <button class="streak-pill profile-chip" id="profileChipBtn" title="Switch learner" aria-label="Switch learner">🙂 Learner</button>
     <div class="streak-pill">🔥 <span id="streakTop">0</span> day streak</div>
-    <button class="icon-btn" id="fontToggleBtn" title="Easier-to-read font" aria-label="Toggle dyslexia-friendly font">Ff</button>
-    <button class="icon-btn" id="remindBtn" title="Daily reminder" aria-label="Toggle daily reminder">🔔</button>
-    <button class="icon-btn" id="textSizeBtn" title="Larger text" aria-label="Toggle larger text">Aa</button>
+    <button class="icon-btn" id="settingsBtn" title="Settings" aria-label="Open settings">⚙️</button>
   </div>
 </header>
 
@@ -443,26 +458,28 @@
       <div class="sum-card due"><div class="icon">🔥</div><div><div class="num" id="streakVal2">0</div><div class="lbl">day streak</div></div></div>
     </div>
 
-    <div class="ach-row ach-row-1" style="margin-bottom:12px;">
-      <div class="sum-card stars" id="achievementsCard" style="cursor:pointer;">
-        <div class="icon">🏅</div><div><div class="num" id="achEarnedCount">0 of 0</div><div class="lbl">achievements — tap to view</div></div>
+    <div id="journeyExtras">
+      <div class="ach-row ach-row-1" style="margin-bottom:12px;">
+        <div class="sum-card stars" id="achievementsCard" style="cursor:pointer;">
+          <div class="icon">🏅</div><div><div class="num" id="achEarnedCount">0 of 0</div><div class="lbl">achievements — tap to view</div></div>
+        </div>
       </div>
-    </div>
-    <div class="ach-row ach-row-2 hidden" id="achievementsSubRow" style="margin-bottom:12px;">
-      <div class="sum-card streak" id="achUnlockedCard" style="cursor:pointer;">
-        <div class="icon">🔓</div><div><div class="num" id="achUnlockedNum">0</div><div class="lbl">unlocked</div></div>
+      <div class="ach-row ach-row-2 hidden" id="achievementsSubRow" style="margin-bottom:12px;">
+        <div class="sum-card streak" id="achUnlockedCard" style="cursor:pointer;">
+          <div class="icon">🔓</div><div><div class="num" id="achUnlockedNum">0</div><div class="lbl">unlocked</div></div>
+        </div>
+        <div class="sum-card due" id="achLockedCard" style="cursor:pointer;">
+          <div class="icon">🔒</div><div><div class="num" id="achLockedNum">0</div><div class="lbl">locked</div></div>
+        </div>
       </div>
-      <div class="sum-card due" id="achLockedCard" style="cursor:pointer;">
-        <div class="icon">🔒</div><div><div class="num" id="achLockedNum">0</div><div class="lbl">locked</div></div>
-      </div>
-    </div>
-    <div class="games-grid hidden" id="achievementsGrid" style="margin-bottom:26px;"></div>
+      <div class="games-grid hidden" id="achievementsGrid" style="margin-bottom:26px;"></div>
 
-    <div class="view-head" style="margin-top:8px;"><h2 style="font-size:19px;">Mastered Over Time</h2></div>
-    <div class="path-card" style="margin-bottom:26px;padding:18px;"><div id="progressChart"></div></div>
+      <div class="view-head" style="margin-top:8px;"><h2 style="font-size:19px;">Mastered Over Time</h2></div>
+      <div class="path-card" style="margin-bottom:26px;padding:18px;"><div id="progressChart"></div></div>
 
-    <div class="view-head" style="margin-top:8px;"><h2 style="font-size:19px;">Review Pace</h2><p>How aggressively verses come back up for review once you've learned them.</p></div>
-    <div class="filter-row" id="paceRow"></div>
+      <div class="view-head" style="margin-top:8px;"><h2 style="font-size:19px;">Review Pace</h2><p>How aggressively verses come back up for review once you've learned them.</p></div>
+      <div class="filter-row" id="paceRow"></div>
+    </div>
   </section>
 
   <section class="view" id="view-family">
@@ -474,6 +491,45 @@
 
 <div class="modal-overlay hidden" id="profileModal">
   <div class="modal-card" id="profileModalCard"></div>
+</div>
+
+<div class="modal-overlay hidden" id="walkthroughModal">
+  <div class="modal-card" style="text-align:center;">
+    <div id="walkthroughBody"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:18px;">
+      <button type="button" id="walkthroughSkip" style="all:unset;font-size:12px;font-weight:700;color:var(--ink-soft);text-decoration:underline;cursor:pointer;">Skip</button>
+      <div id="walkthroughDots" style="display:flex;gap:6px;"></div>
+      <button class="btn lantern small" id="walkthroughNext" type="button">Next</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="settingsModal">
+  <div class="modal-card">
+    <h2 style="margin:0 0 4px;font-size:22px;color:var(--twilight-deep);">Settings</h2>
+    <p style="margin:0 0 18px;font-size:13.5px;color:var(--ink-soft);font-weight:600;">These apply just to your profile.</p>
+
+    <div class="settings-row">
+      <div><div class="settings-label">Simple Mode</div><div class="settings-sub">Hides Library, Family, and extra stats — just Path, Verse Book, and Games.</div></div>
+      <button type="button" class="switch" id="simpleModeSwitch"><span class="knob"></span></button>
+    </div>
+    <div class="settings-row">
+      <div><div class="settings-label">Larger Text</div><div class="settings-sub">Makes everything on screen bigger.</div></div>
+      <button type="button" class="switch" id="textSizeSwitch"><span class="knob"></span></button>
+    </div>
+    <div class="settings-row">
+      <div><div class="settings-label">Easier-to-Read Font</div><div class="settings-sub">Switches to a font designed for reading clarity.</div></div>
+      <button type="button" class="switch" id="fontToggleSwitch"><span class="knob"></span></button>
+    </div>
+    <div class="settings-row" style="border-bottom:none;">
+      <div><div class="settings-label">Daily Reminder</div><div class="settings-sub">A gentle nudge if it's been a day since you practiced.</div></div>
+      <button type="button" class="switch" id="remindSwitch"><span class="knob"></span></button>
+    </div>
+
+    <div style="text-align:right;margin-top:16px;">
+      <button class="btn lantern small" id="settingsCloseBtn" type="button">Done</button>
+    </div>
+  </div>
 </div>
 
 <div class="update-banner hidden" id="updateBanner">
@@ -819,7 +875,7 @@ const GAMES = [
 /* =====================================================================
    STATE + PERSISTENCE
 ===================================================================== */
-let state = { verses: [], archivedVerses: [], backlog: [], progress: {}, streak:0, lastPracticeDay:null, totalCorrect:0, totalAttempts:0, earnedAchievements:[], masteryLog:[], pace:"standard", dyslexiaFont:false, remindMe:false };
+let state = { verses: [], archivedVerses: [], backlog: [], progress: {}, streak:0, lastPracticeDay:null, totalCorrect:0, totalAttempts:0, earnedAchievements:[], masteryLog:[], pace:"standard", dyslexiaFont:false, remindMe:false, simpleMode:false };
 let bookFilter = "all";
 let session = null;
 let storageOk = true;
@@ -828,7 +884,7 @@ function today(){ return Math.floor(Date.now()/86400000); }
 function profileKey(id){ return "lamplight-state-v2:"+id; }
 
 async function loadState(id){
-  state = { verses: [], archivedVerses: [], backlog: [], progress: {}, streak:0, lastPracticeDay:null, totalCorrect:0, totalAttempts:0, earnedAchievements:[], masteryLog:[], pace:"standard", dyslexiaFont:false, remindMe:false };
+  state = { verses: [], archivedVerses: [], backlog: [], progress: {}, streak:0, lastPracticeDay:null, totalCorrect:0, totalAttempts:0, earnedAchievements:[], masteryLog:[], pace:"standard", dyslexiaFont:false, remindMe:false, simpleMode:false };
   try{
     const res = await window.storage.get(profileKey(id), false);
     if(res && res.value){
@@ -857,7 +913,7 @@ function freshState(){
   const verses = LIBRARY_VERSES.slice(0, BATCH_SIZE);
   const progress = {};
   verses.forEach(v=> progress[v.id] = {unlocked:1, streak:0, mastered:false, dueDay:0, fullPracticed:false, misses:0});
-  return { verses, archivedVerses:[], backlog:[], progress, streak:0, lastPracticeDay:null, totalCorrect:0, totalAttempts:0, earnedAchievements:[], masteryLog:[], pace:"standard", dyslexiaFont:false, remindMe:false };
+  return { verses, archivedVerses:[], backlog:[], progress, streak:0, lastPracticeDay:null, totalCorrect:0, totalAttempts:0, earnedAchievements:[], masteryLog:[], pace:"standard", dyslexiaFont:false, remindMe:false, simpleMode:false };
 }
 function seedDemo(){
   state = Object.assign(state, freshState());
@@ -1112,9 +1168,10 @@ function renderSignupSecurityScreen(card, forced){
     state = Object.assign({}, result.data);
     saveState();
     closeProfileModal();
+    applySimpleModeUI();
     renderAll();
     updateProfileChip();
-    toast("Welcome, "+draftSignup.name+"! 🎉");
+    maybeShowWalkthrough();
   };
 }
 
@@ -1152,9 +1209,10 @@ function renderLoginScreen(card, forced){
     state = Object.assign({}, match.data);
     saveState();
     closeProfileModal();
+    applySimpleModeUI();
     renderAll();
     updateProfileChip();
-    toast("Welcome back, "+profile.name+"! ✨");
+    maybeShowWalkthrough();
   };
 }
 
@@ -1246,6 +1304,7 @@ function renderForgotResetScreen(card, forced){
     state = Object.assign({}, d);
     saveState();
     closeProfileModal();
+    applySimpleModeUI();
     renderAll();
     updateProfileChip();
     toast("Password updated — welcome back, "+profile.name+"!");
@@ -1264,6 +1323,7 @@ async function switchProfile(id){
   }
   if(!loadedFromCloud) await loadState(id);
   closeProfileModal();
+  applySimpleModeUI();
   renderAll();
   updateProfileChip();
   toast("Playing as "+p.name);
@@ -1275,7 +1335,7 @@ async function logOutCurrentProfile(){
   await saveProfilesList();
   currentProfile = null;
   await setActiveProfileId("");
-  state = { verses: [], archivedVerses: [], backlog: [], progress: {}, streak:0, lastPracticeDay:null, totalCorrect:0, totalAttempts:0, earnedAchievements:[], masteryLog:[], pace:"standard", dyslexiaFont:false, remindMe:false };
+  state = { verses: [], archivedVerses: [], backlog: [], progress: {}, streak:0, lastPracticeDay:null, totalCorrect:0, totalAttempts:0, earnedAchievements:[], masteryLog:[], pace:"standard", dyslexiaFont:false, remindMe:false, simpleMode:false };
   renderAll();
   updateProfileChip();
   toast("Logged out of "+name);
@@ -1410,17 +1470,45 @@ document.getElementById("tabList").addEventListener("click", e=>{
   const b=e.target.closest("button[data-view]"); if(!b) return;
   showView(b.dataset.view);
 });
-document.getElementById("textSizeBtn").addEventListener("click", ()=>{
-  document.body.classList.toggle("big-text");
-  document.getElementById("textSizeBtn").classList.toggle("active");
+
+function setSwitch(el, on){ el.classList.toggle("on", !!on); }
+function applySimpleModeUI(){
+  document.querySelectorAll('#tabList button[data-view="library"], #tabList button[data-view="family"]').forEach(b=>{
+    b.classList.toggle("hidden", !!state.simpleMode);
+  });
+}
+document.getElementById("settingsBtn").addEventListener("click", ()=>{
+  setSwitch(document.getElementById("simpleModeSwitch"), state.simpleMode);
+  setSwitch(document.getElementById("textSizeSwitch"), document.body.classList.contains("big-text"));
+  setSwitch(document.getElementById("fontToggleSwitch"), document.body.classList.contains("dyslexia-font"));
+  setSwitch(document.getElementById("remindSwitch"), state.remindMe);
+  document.getElementById("settingsModal").classList.remove("hidden");
 });
-document.getElementById("fontToggleBtn").addEventListener("click", ()=>{
+document.getElementById("settingsCloseBtn").addEventListener("click", ()=>{
+  document.getElementById("settingsModal").classList.add("hidden");
+});
+document.getElementById("simpleModeSwitch").addEventListener("click", (e)=>{
+  state.simpleMode = !state.simpleMode;
+  setSwitch(e.currentTarget, state.simpleMode);
+  saveState();
+  applySimpleModeUI();
+  if(state.simpleMode && ["library","family"].includes(document.querySelector(".view.active")?.id?.replace("view-",""))){
+    showView("path");
+  }
+  renderJourney();
+});
+document.getElementById("textSizeSwitch").addEventListener("click", (e)=>{
+  document.body.classList.toggle("big-text");
+  setSwitch(e.currentTarget, document.body.classList.contains("big-text"));
+});
+document.getElementById("fontToggleSwitch").addEventListener("click", (e)=>{
   document.body.classList.toggle("dyslexia-font");
-  document.getElementById("fontToggleBtn").classList.toggle("active");
-  state.dyslexiaFont = document.body.classList.contains("dyslexia-font");
+  const on = document.body.classList.contains("dyslexia-font");
+  setSwitch(e.currentTarget, on);
+  state.dyslexiaFont = on;
   saveState();
 });
-document.getElementById("remindBtn").addEventListener("click", async ()=>{
+document.getElementById("remindSwitch").addEventListener("click", async (e)=>{
   if(!("Notification" in window)){ toast("Notifications aren't supported in this browser."); return; }
   if(!state.remindMe){
     const perm = await Notification.requestPermission();
@@ -1431,8 +1519,8 @@ document.getElementById("remindBtn").addEventListener("click", async ()=>{
     state.remindMe = false;
     toast("Reminders off.");
   }
+  setSwitch(e.currentTarget, state.remindMe);
   saveState();
-  document.getElementById("remindBtn").classList.toggle("active", state.remindMe);
 });
 function maybeShowReminder(){
   if(!state.remindMe) return;
@@ -1443,6 +1531,47 @@ function maybeShowReminder(){
   }
 }
 function refreshHeaderStats(){ document.getElementById("streakTop").textContent = state.streak; }
+
+const WALKTHROUGH_SCREENS = [
+  {icon:"🏮", title:"Welcome to Starlamb!", body:"Every verse lights the way. Let's take a quick look around before you start."},
+  {icon:"🛤️", title:"This is your Path", body:"Walk the trail one verse at a time — tap a glowing lantern to practice it."},
+  {icon:"🎲", title:"Games make it fun", body:"Word Gaps, Puzzle Builder, and more help you practice. Memory Flip is the one that unlocks new parts and marks a verse mastered."},
+  {icon:"⭐", title:"Track how far you've come", body:"Your Journey tab shows your streak, achievements, and progress. Ready to start?"}
+];
+let walkthroughStep = 0;
+function introSeenKey(profileId){ return "starlamb-intro-seen:"+profileId; }
+async function maybeShowWalkthrough(){
+  if(!currentProfile) return;
+  try{
+    const res = await window.storage.get(introSeenKey(currentProfile.id), false);
+    if(res && res.value) return;
+  }catch(e){ return; }
+  walkthroughStep = 0;
+  renderWalkthroughStep();
+  document.getElementById("walkthroughModal").classList.remove("hidden");
+}
+function renderWalkthroughStep(){
+  const s = WALKTHROUGH_SCREENS[walkthroughStep];
+  document.getElementById("walkthroughBody").innerHTML = `
+    <div style="font-size:46px;margin-bottom:10px;">${s.icon}</div>
+    <h2 style="margin:0 0 8px;font-size:20px;color:var(--twilight-deep);font-family:var(--font-display);">${s.title}</h2>
+    <p style="margin:0;font-size:13.5px;color:var(--ink-soft);font-weight:600;">${s.body}</p>
+  `;
+  document.getElementById("walkthroughDots").innerHTML = WALKTHROUGH_SCREENS.map((_,i)=>
+    `<span class="wt-dot ${i===walkthroughStep?'active':''}"></span>`).join("");
+  document.getElementById("walkthroughNext").textContent = walkthroughStep===WALKTHROUGH_SCREENS.length-1 ? "Let's Go!" : "Next";
+}
+async function closeWalkthrough(){
+  document.getElementById("walkthroughModal").classList.add("hidden");
+  if(currentProfile){
+    try{ await window.storage.set(introSeenKey(currentProfile.id), "1", false); }catch(e){}
+  }
+}
+document.getElementById("walkthroughNext").addEventListener("click", ()=>{
+  if(walkthroughStep < WALKTHROUGH_SCREENS.length-1){ walkthroughStep++; renderWalkthroughStep(); }
+  else closeWalkthrough();
+});
+document.getElementById("walkthroughSkip").addEventListener("click", closeWalkthrough);
 document.getElementById("achievementsCard").addEventListener("click", ()=>{
   achievementsExpanded = !achievementsExpanded;
   if(!achievementsExpanded) achievementsView = null;
@@ -2320,6 +2449,10 @@ function renderJourney(){
   document.getElementById("masteredVal").textContent=mastered;
   document.getElementById("streakVal2").textContent=state.streak;
 
+  const extras = document.getElementById("journeyExtras");
+  if(extras) extras.classList.toggle("hidden", !!state.simpleMode);
+  if(state.simpleMode) return;
+
   renderAchievementsGrid();
   renderProgressChart();
   renderPaceSettings();
@@ -2346,11 +2479,12 @@ async function init(){
     if(cloudData){ state = cloudData; loadedFromCloud = true; }
   }
   if(!loadedFromCloud) await loadState(currentProfile.id);
-  if(state.dyslexiaFont){ document.body.classList.add("dyslexia-font"); document.getElementById("fontToggleBtn").classList.add("active"); }
-  if(state.remindMe){ document.getElementById("remindBtn").classList.add("active"); }
+  if(state.dyslexiaFont){ document.body.classList.add("dyslexia-font"); }
+  applySimpleModeUI();
   renderAll();
   updateProfileChip();
   maybeShowReminder();
+  maybeShowWalkthrough();
 }
 init();
 
